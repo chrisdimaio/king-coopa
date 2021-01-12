@@ -1,3 +1,4 @@
+from sun_trigger import SunTrigger
 from device_states import States
 from time import sleep
 from threading import Thread
@@ -24,12 +25,20 @@ class DoorOpener:
             up_pin=20, down_pin=26
         )
 
+        self.trigger = SunTrigger(0)
         self.state = States.CLOSED
 
     def start(self):
         def worker():
             while(True):
-                print("State: {}".format(self.state.value))
+                if self.trigger.is_sunrise() and self.state is States.CLOSED:
+                    print("Opening door...")
+                    self.open()
+                    print("State: {}".format(self.state.value))
+                if self.trigger.is_sunset() and self.state is States.OPEN:
+                    print("Closing door...")
+                    self.close()
+                    print("State: {}".format(self.state.value))
                 sleep(self._FREQUENCY)
 
         t = Thread(target=worker)
