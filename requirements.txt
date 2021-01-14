@@ -68,6 +68,7 @@ python-apt==1.8.4.3
 python-dateutil==2.8.1
 pytz==2020.5
 pyxdg==0.25
+PyYAML==5.3.1
 rainbowhat==0.1.0
 reportlab==3.5.13
 requests==2.21.0
