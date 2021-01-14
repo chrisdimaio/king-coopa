@@ -3,8 +3,8 @@ from yaml.loader import FullLoader
 
 
 class Configuration():
-    REQUIRED_CONFIGS = ["latitude", "longitude",
-                        "sunrise_offset", "sunset_offset", "open_pin", "close_pin"]
+    REQUIRED_CONFIGS = ["actuator_specs", "close_pin", "latitude",
+                        "longitude", "open_pin", "sunrise_offset", "sunset_offset"]
 
     def __init__(self, config_file="config.yaml"):
         with open(config_file, "r") as yml:

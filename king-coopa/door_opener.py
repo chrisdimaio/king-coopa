@@ -22,7 +22,7 @@ class DoorOpener:
         self.close_time = close_time
 
         self.actuator = actuator_class(
-            open_pin=config.open_pin, close_pin=config.close_pin
+            specs=config.actuator_specs, open_pin=config.open_pin, close_pin=config.close_pin
         )
 
         self.trigger = SunTrigger(config)

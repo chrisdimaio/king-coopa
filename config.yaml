@@ -4,3 +4,7 @@ sunrise_offset: 15
 sunset_offset: 30
 open_pin: 20
 close_pin: 26
+actuator_specs:
+  stroke: 35
+  duty_cycle: .2
+  speed: 5.7
