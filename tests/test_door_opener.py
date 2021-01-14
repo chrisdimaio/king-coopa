@@ -3,5 +3,5 @@ import unittest
 
 class TestDoorOpener(unittest.TestCase):
 
-    def some_test():
+    def test_dummy(self):
         pass
