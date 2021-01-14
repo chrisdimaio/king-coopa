@@ -4,9 +4,8 @@ from suntime import Sun, SunTimeException
 
 class SunTimesCalculator:
     def __init__(self, longitude, latitude):
-        # East Hampstead NH
-        self.latitude = 42.8836989
-        self.longitude = -71.1681156
+        self._longitude = longitude
+        self._latitude = latitude
 
         self._cache = {}
 
@@ -20,7 +19,7 @@ class SunTimesCalculator:
     def _calc_cache(self):
         date = datetime.date.today()
         if date not in self._cache:
-            # Not point in keeping the previos times.
+            # No point in keeping the previos times.
             self._cache = {}
             self._cache[date] = self._calc()
         return self._cache[date]
@@ -30,7 +29,11 @@ class SunTimesCalculator:
     """
 
     def _calc(self):
-        sun = Sun(self.latitude, self.longitude)
+        sun = Sun(self._latitude, self._longitude)
+        # return {
+        #     "sunrise": datetime.datetime(year=2021, month=1, day=14, hour=1, minute=30, second=0),
+        #     "sunset": sun.get_local_sunset_time()
+        # }
         return {
             "sunrise": sun.get_local_sunrise_time(),
             "sunset": sun.get_local_sunset_time()

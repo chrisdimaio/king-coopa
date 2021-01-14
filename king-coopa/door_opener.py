@@ -8,7 +8,7 @@ class DoorOpener:
     # Seconds per cycle
     _FREQUENCY = 1
 
-    def __init__(self, actuator_class, open_time, close_time):
+    def __init__(self, actuator_class, open_time, close_time, config):
         if actuator_class is None:
             raise Exception(
                 "An actuator class must be specified."
@@ -22,10 +22,10 @@ class DoorOpener:
         self.close_time = close_time
 
         self.actuator = actuator_class(
-            up_pin=20, down_pin=26
+            open_pin=config.open_pin, close_pin=config.close_pin
         )
 
-        self.trigger = SunTrigger(0)
+        self.trigger = SunTrigger(config)
         self.state = States.CLOSED
 
     def start(self):

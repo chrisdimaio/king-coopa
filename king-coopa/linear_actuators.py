@@ -10,15 +10,15 @@ from time import sleep
 
 
 class LinearActuator(SourceMixin, CompositeDevice):
-    def __init__(self, up_pin, down_pin, up_duration, down_duration, duty_cycle):
-        if not all(p is not None for p in [up_pin, down_pin]):
+    def __init__(self, open_pin, close_pin, up_duration, down_duration, duty_cycle):
+        if not all(p is not None for p in [open_pin, close_pin]):
             raise GPIOPinMissing(
                 'forward and backward pins must be provided'
             )
 
         devices = OrderedDict((
-            ('up_device', DigitalOutputDevice(up_pin)),
-            ('down_device', DigitalOutputDevice(down_pin)),
+            ('up_device', DigitalOutputDevice(open_pin)),
+            ('down_device', DigitalOutputDevice(close_pin)),
         ))
 
         self.up_duration = up_duration
@@ -49,9 +49,9 @@ class AMTGF12V350T1(LinearActuator):
     STROKE = 350
     SPEED = 5.7
 
-    def __init__(self, up_pin, down_pin):
+    def __init__(self, open_pin, close_pin):
         cycle_time = self.STROKE/self.SPEED
-        super().__init__(up_pin, down_pin, cycle_time, cycle_time, self.DUTY_CYCLE)
+        super().__init__(open_pin, close_pin, cycle_time, cycle_time, self.DUTY_CYCLE)
 
 
 class TESTER(LinearActuator):
@@ -59,6 +59,6 @@ class TESTER(LinearActuator):
     STROKE = 35
     SPEED = 5.7
 
-    def __init__(self, up_pin, down_pin):
+    def __init__(self, open_pin, close_pin):
         cycle_time = self.STROKE/self.SPEED
-        super().__init__(up_pin, down_pin, cycle_time, cycle_time, self.DUTY_CYCLE)
+        super().__init__(open_pin, close_pin, cycle_time, cycle_time, self.DUTY_CYCLE)
