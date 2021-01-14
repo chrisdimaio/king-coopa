@@ -1,3 +1,4 @@
+art==5.1
 autopep8==1.5.4
 colorzero==1.1
 gpiozero==1.5.1

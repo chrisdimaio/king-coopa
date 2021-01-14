@@ -9,9 +9,13 @@ from configuration import Configuration
 from door_opener import DoorOpener
 from gpiozero import LED, OutputDevice
 from time import sleep
+from art import tprint
 
 
 def main():
+    tprint("King")
+    tprint("   Coopa !")
+
     door_opener = DoorOpener(
         actuator_class=TESTER, open_time="Some time", close_time="Some time", config=Configuration()
     )
