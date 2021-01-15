@@ -4,4 +4,4 @@
 
 Automated chicken coop door software for the Raspberry PI. 
 
-
+[![Watch the video](https://img.youtube.com/vi/MoYLyeGovbg/maxresdefault.jpg)](https://youtu.be/MoYLyeGovbg)
