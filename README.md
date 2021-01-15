@@ -5,4 +5,4 @@
 Automated chicken coop door software for the Raspberry PI. 
 
 ### A Rough prototype in action
-<a target="_blank" rel="noopener noreferrer" href="https://youtu.be/MoYLyeGovbg"><img src="https://img.youtube.com/vi/MoYLyeGovbg/maxresdefault.jpg" align="left" height="360" width="640"></a>
+<a href="https://youtu.be/MoYLyeGovbg"><img src="https://img.youtube.com/vi/MoYLyeGovbg/maxresdefault.jpg" align="left" height="360" width="640"></a>
