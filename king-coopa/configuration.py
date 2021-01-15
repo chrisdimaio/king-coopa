@@ -11,6 +11,5 @@ class Configuration():
             cfg = yaml.load(yml, Loader=FullLoader)
             for c in self.REQUIRED_CONFIGS:
                 if c not in cfg:
-                    print(c)
                     raise Exception("Missing required config '{}'".format(c))
         self.__dict__.update(cfg)
