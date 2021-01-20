@@ -4,7 +4,7 @@
 
 Automated chicken coop door opening software for the Raspberry PI. 
 
-- Door is opened and closed at sunrise and sunset, respectively. Sunrise and sunset are calculated of your coops location.
+- Door is opened and closed at sunrise and sunset, respectively. Sunrise and sunset are calculated off of your coops location.
   ```yaml
   longitude: -71.1681156
   latitude: 42.8836989
