@@ -1,0 +1,13 @@
+[Unit]
+Description=King Coopa service
+After=network.target
+StartLimitIntervalSec=0
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=pi
+ExecStart=/usr/bin/env bash /home/pi/king_coopa/king-coopa.sh
+
+[Install]
+WantedBy=multi-user.target
