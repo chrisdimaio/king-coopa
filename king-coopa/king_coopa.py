@@ -1,6 +1,3 @@
-#! /usr/bin/python3
-
-
 from datetime import datetime
 from sun_times_calc import SunTimesCalculator
 from sun_trigger import SunTrigger
