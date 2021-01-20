@@ -1,7 +1,8 @@
 from sun_trigger import SunTrigger
 from device_states import States
 from time import sleep
-from threading import Thread
+
+import threading
 
 
 class DoorOpener:
@@ -26,23 +27,22 @@ class DoorOpener:
         )
 
         self.trigger = SunTrigger(config)
-        self.state = States.CLOSED
+        self.state = States.OFF
 
     def start(self):
         def worker():
             while(True):
-                if self.trigger.is_sunrise() and self.state is States.CLOSED:
+                if self.trigger.is_sunrise() and self.state is not States.OPEN:
                     print("Opening door...")
                     self.open()
                     print("State: {}".format(self.state.value))
-                if self.trigger.is_sunset() and self.state is States.OPEN:
+                if self.trigger.is_sunset() and self.state is not States.CLOSED:
                     print("Closing door...")
                     self.close()
                     print("State: {}".format(self.state.value))
                 sleep(self._FREQUENCY)
-
-        t = Thread(target=worker)
-        t.start()
+        threading.Thread(target=worker).start()
+        self.state = States.ON
 
     def close(self):
         self.state = States.CLOSING
@@ -53,3 +53,8 @@ class DoorOpener:
         self.state = States.OPENING
         self.actuator.up()
         self.state = States.OPEN
+
+    def serializable(self):
+        return {
+            "state": self.state.value
+        }

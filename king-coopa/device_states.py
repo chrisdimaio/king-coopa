@@ -7,6 +7,8 @@ class AutoName(Enum):
 
 
 class States(AutoName):
+    OFF = auto()
+    ON = auto()
     OPEN = auto()
     OPENING = auto()
     CLOSED = auto()

@@ -10,6 +10,7 @@ from door_opener import DoorOpener
 from gpiozero import LED, OutputDevice
 from time import sleep
 from art import tprint
+import api_server as server
 
 
 def main():
@@ -17,9 +18,12 @@ def main():
     tprint("   Coopa !")
 
     config = Configuration()
+
     door_opener = DoorOpener(
         actuator_class=LinearActuator, open_time="Some time", close_time="Some time", config=config
     )
+
+    server.run(config, door_opener)
 
     door_opener.start()
 

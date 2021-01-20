@@ -13,3 +13,6 @@ class Configuration():
                 if c not in cfg:
                     raise Exception("Missing required config '{}'".format(c))
         self.__dict__.update(cfg)
+
+    def serializable(self):
+        return self.__dict__
