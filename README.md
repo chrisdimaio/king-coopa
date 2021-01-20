@@ -30,14 +30,14 @@ There's an API so you can control and check the status of your door.
 *Coming soon*
 
 ## Install
-*Coming soon*
+*Coming soon...*
 
 ## How to Build the Door
 ### Steps
-*Coming soon*
+*Coming soon...*
 ### Parts list
-*Coming soon*
+*Coming soon...*
 
-## Extras...
+## Extras!
 ### Prototype in action
 <a href="https://youtu.be/MoYLyeGovbg"><img src="https://img.youtube.com/vi/MoYLyeGovbg/maxresdefault.jpg" align="left" height="360" width="640"></a>
