@@ -43,13 +43,20 @@ def state():
     return jsonify(global_door_opener.serializable())
 
 
+@app.route("/close", methods=["put"])
+def close():
+    global_door_opener.close()
+    return state()
+
+
 @app.route("/open", methods=["put"])
 def open():
     global_door_opener.open()
     return state()
 
 
-@app.route("/close", methods=["put"])
-def close():
-    global_door_opener.close()
-    return state()
+@app.route("/restart", methods=["put"])
+def restart():
+    import subprocess
+    subprocess.Popen(["sudo", "systemctl", "restart", "king-coopa"])
+    return jsonify({"Success": True})
