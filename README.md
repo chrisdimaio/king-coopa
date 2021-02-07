@@ -52,7 +52,7 @@ Copy the unit file to the Systemd system directory and start it.
 sudo cp king-coopa.service /etc/systemd/system && sudo systemctl start king-coopa.service
 ```
 
-Check that it is active
+Check that the service is active
 
 ```bash
 systemctl is-active king-coopa.service
