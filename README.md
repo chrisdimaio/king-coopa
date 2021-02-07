@@ -70,11 +70,10 @@ _Coming soon..._
 
 ## Extras!
 
-### Open/Close/Open test of the complete door
+### The complete door passing open/close/open test
 
-<a href="https://youtube/aqsExHMFxAc"><img src="https://img.youtube.com/vi/aqsExHMFxAc/maxresdefault.jpg" align="left" height="360" width="640"></a>
-
+<a href="https://youtube/aqsExHMFxAc"><img src="https://img.youtube.com/vi/aqsExHMFxAc/maxresdefault.jpg"  height="360" width="640"></a>
 
 ### Prototype in action
 
-<a href="https://youtu.be/MoYLyeGovbg"><img src="https://img.youtube.com/vi/MoYLyeGovbg/maxresdefault.jpg" align="left" height="360" width="640"></a>
+<a href="https://youtu.be/MoYLyeGovbg"><img src="https://img.youtube.com/vi/MoYLyeGovbg/maxresdefault.jpg" height="360" width="640"></a>
