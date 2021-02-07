@@ -66,7 +66,10 @@ _Coming soon..._
 
 ### Parts list
 
-_Coming soon..._
+* Raspberry Pi Zero WH <a href="https://www.adafruit.com/product/3708">here</a>
+  * Raspberry Pi Zero Case <a href="https://www.adafruit.com/product/3252">here</a>
+  * PCF8523 Real Time Clock for Raspberry Pi <a href="https://www.adafruit.com/product/3386">here</a>
+* Four inche stroke actuator <a href="https://www.amazon.com/dp/B00NM8H6VS/ref=cm_sw_r_tw_dp_QK3SXWVJP51N17N46ZG5?_encoding=UTF8&psc=1">here</a>
 
 ## Extras!
 
