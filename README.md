@@ -70,6 +70,7 @@ _Coming soon..._
 Solve for r.
 
 For example,
+
 <img src="https://render.githubusercontent.com/render/math?math=r=4*4/2\pi=16/2\pi=2.546">
 
 An actuator with a 4 inch stroke would need to be places 2.546 inches from the hinge in order for the door to rotate 90 degrees.
