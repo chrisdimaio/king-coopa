@@ -18,11 +18,11 @@ latitude: 42.8836989
 
 ### Fine Tuning
 
-For those early birds or night owls :wink: a plus or minus offset can be set to delay or expedite open and closing.
+For those early birds or night owls :wink: a plus or minus offset can be set to delay or expedite opening and closing.
 
 ```yaml
 sunrise_offset: 15
-sunset_offset: 44
+sunset_offset: 45
 ```
 
 ### Remote Control
