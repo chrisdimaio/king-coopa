@@ -66,10 +66,10 @@ _Coming soon..._
 
 #### Formula for placing actuator in correct spot on door
 <img src="https://render.githubusercontent.com/render/math?math=S= Length of stroke">
-<img src="https://render.githubusercontent.com/render/math?math=r=4S/2pi">
-Now we want to solve for <img src="https://render.githubusercontent.com/render/math?math=r">
+<img src="https://render.githubusercontent.com/render/math?math=r=4S/2\pi">
+Now we want to solve for r
 For example,
-<img src="https://render.githubusercontent.com/render/math?math=r=4*4/2pi=16/2pi=2.546">
+<img src="https://render.githubusercontent.com/render/math?math=r=4*4/2pi=16/2\pi=2.546">
 An actuator with a 4 inch stroke would need to be places 2.546 inches from the hinge in order for the door to rotate 90 degrees.
 
 ### Parts list
