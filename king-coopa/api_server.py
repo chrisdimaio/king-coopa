@@ -1,4 +1,4 @@
-from flask import Flask, Response
+from flask import Flask, Response, request
 from flask.json import jsonify
 
 import threading
@@ -22,6 +22,8 @@ def run(config, door_opener):
 
     if config.api_server["enabled"]:
         app.config["JSONIFY_PRETTYPRINT_REGULAR"] = True
+        app.config["UPLOAD_FOLDER"] = ""
+        app.config["MAX_CONTENT_PATH"] = 4096
 
         threading.Thread(target=app.run, kwargs={
             "host": config.api_server["host"], "port": config.api_server["port"]}).start()
@@ -60,3 +62,12 @@ def restart():
     import subprocess
     subprocess.Popen(["sudo", "systemctl", "restart", "king-coopa"])
     return jsonify({"Success": True})
+
+
+@app.route('/upload_config', methods=["post"])
+def upload_config():
+    f = request.files["upload.test.yaml"]
+    print(f)
+    f.save("upload.test.yaml")
+    print(f)
+    return 'file uploaded successfully'

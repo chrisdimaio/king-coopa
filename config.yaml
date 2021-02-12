@@ -1,7 +1,7 @@
 longitude: -71.1681156
 latitude: 42.8836989
 sunrise_offset: 180
-sunset_offset: 5
+sunset_offset: 2
 open_pin: 20
 close_pin: 26
 api_server:
