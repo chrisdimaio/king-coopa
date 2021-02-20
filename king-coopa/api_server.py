@@ -64,10 +64,18 @@ def restart():
     return jsonify({"Success": True})
 
 
-@app.route('/upload_config', methods=["post"])
-def upload_config():
-    f = request.files["upload.test.yaml"]
-    print(f)
-    f.save("upload.test.yaml")
-    print(f)
-    return 'file uploaded successfully'
+@app.route('/reconfigure', methods=["post"])
+def reconfigure():
+    import builtins
+    import subprocess
+    import yaml
+    from yaml.loader import FullLoader
+    try:
+        # Backup the current config
+        subprocess.Popen(["mv", "config.yaml", "config.yaml.previous"])
+        with builtins.open("config.yaml", "w") as f:
+            yaml.dump(yaml.load(request.data, Loader=FullLoader), f)
+        restart()
+    except yaml.YAMLError as exc:
+        print(exc)
+    return jsonify({"Success": True})
