@@ -31,11 +31,18 @@ def run(config, door_opener):
 
 @app.route("/info")
 def info():
-    # Response.content_type = "application/json"
+    from subprocess import check_output
+
     return jsonify(
         {
             "door_opener": global_door_opener.serializable(),
-            "config": global_config.serializable()
+            "config": global_config.serializable(),
+            "system": {
+                "cpu_temp": int(
+                    check_output(
+                        ["cat", "/sys/class/thermal/thermal_zone0/temp"]).decode("utf-8").rstrip()
+                ) / 1000
+            }
         }
     )
 
