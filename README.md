@@ -84,7 +84,7 @@ An actuator with a 4 inch stroke would need to be placed 2.546 inches from the h
 
 ## Extras!
 
-### King Coopa in action ###
+### King Coopa in action! ###
 
 <a href="https://youtube/aqsExHMFxAc"><img src="https://img.youtube.com/vi/30huzIxSSeY/maxresdefault.jpg"  height="360" width="640"></a>
 
