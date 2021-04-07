@@ -3,7 +3,7 @@
 ![Build](https://github.com/chrisdimaio/king-coopa/workflows/Build/badge.svg)
 ![GitHub](https://img.shields.io/github/license/chrisdimaio/king-coopa)
 
-Automated chicken coop door opening software for the Raspberry PI.
+Raspberry PI powered automatic chicken coop door opener!
 
 ## Features
 
