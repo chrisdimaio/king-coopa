@@ -13,8 +13,6 @@ public class MonitoringTool {
   public MonitoringTool() {}
 
   public static String getInfo() throws IOException {
-//    URLConnection connection = new URL("http://192.168.1.9:8080/info").openConnection();
-//    InputStream response = new URL("http://192.168.1.9:8080/info").openStream();
     StringBuilder builder = new StringBuilder();
     try (BufferedReader reader = new BufferedReader(
         new InputStreamReader(new URL("http://192.168.1.9:8080/info").openStream()))) {
