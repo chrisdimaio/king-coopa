@@ -1,16 +1,12 @@
 package io.chrisdima.kingcoopa.monitoringtool;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
-import java.net.MalformedURLException;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.URL;
-import java.net.URLConnection;
 import java.util.Map;
 
 public class MonitoringTool {
