@@ -4,6 +4,7 @@ from sun_trigger import SunTrigger
 from linear_actuators import AMTGF12V350T1, TESTER, LinearActuator
 from configuration import Configuration
 from door_opener import DoorOpener
+from door_sensor import DoorSensor
 from gpiozero import LED, OutputDevice
 from time import sleep
 from art import tprint
@@ -20,7 +21,9 @@ def main():
         actuator_class=LinearActuator, open_time="Some time", close_time="Some time", config=config
     )
 
-    server.run(config, door_opener)
+    door_sensor = DoorSensor(config)
+
+    server.run(config, door_opener, door_sensor)
 
     door_opener.start()
 

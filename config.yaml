@@ -1,14 +1,15 @@
 longitude: -71.1681156
 latitude: 42.8836989
-sunrise_offset: 60
-sunset_offset: 45
+sunrise_offset: -10
+sunset_offset: 20
 open_pin: 20
-close_pin: 26
+close_pin: 21
+sensor_pin: 4
 api_server:
   enabled: true
   host: 0.0.0.0
   port: 8080
 actuator_specs:
   stroke: 100
-  duty_cycle: .25
+  duty_cycle: .20
   speed: 4

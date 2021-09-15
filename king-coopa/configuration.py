@@ -4,7 +4,7 @@ from yaml.loader import FullLoader
 
 class Configuration():
     REQUIRED_CONFIGS = ["actuator_specs", "close_pin", "latitude",
-                        "longitude", "open_pin", "sunrise_offset", "sunset_offset"]
+                        "longitude", "open_pin", "sunrise_offset", "sunset_offset", "sensor_pin"]
 
     def __init__(self, config_file="config.yaml"):
         with open(config_file, "r") as yml:

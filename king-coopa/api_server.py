@@ -8,12 +8,14 @@ _REQUIRED_CONFIGS = ["enabled", "host", "port"]
 app = Flask(__name__)
 
 global_door_opener = None
+global_door_sensor = None
 global_config = None
 
 
-def run(config, door_opener):
-    global global_door_opener, global_config
+def run(config, door_opener, door_sensor):
+    global global_door_opener, global_door_sensor, global_config
     global_door_opener = door_opener
+    global_door_sensor = door_sensor
     global_config = config
 
     for c in _REQUIRED_CONFIGS:
@@ -37,6 +39,7 @@ def info():
     return jsonify(
         {
             "door_opener": global_door_opener.serializable(),
+            "door_sensor": global_door_sensor.serializable(),
             "config": global_config.serializable(),
             "system": {
                 "time": datetime.now().strftime("%A %B %d, %Y %H:%M:%S"),
