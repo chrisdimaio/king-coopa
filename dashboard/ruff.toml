@@ -1,0 +1,7 @@
+# Lint rules for the dashboard (run by scripts/static-analysis.sh / the pre-push hook).
+target-version = "py312"
+line-length = 120
+
+[lint]
+# Security checks are bandit's job (see scripts/static-analysis.sh).
+select = ["E", "F", "W", "I", "UP", "B", "BLE", "RUF"]

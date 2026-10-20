@@ -3,6 +3,7 @@
 The proxy avoids CORS (the Flask API sends no CORS headers) and lets info and
 controls point at different targets while the dashboard is being built.
 """
+import http.client
 import json
 import os
 import time
@@ -29,6 +30,12 @@ INFO_URL = os.environ.get("KC_INFO_URL", "").rstrip("/")
 if not INFO_URL:
     raise SystemExit("KC_INFO_URL is not set (e.g. http://<pi-address>:8080). See dashboard/.env.example.")
 CONTROL_URL = os.environ.get("KC_CONTROL_URL", "http://fake-king-coopa.invalid:8080").rstrip("/")
+# Only plain HTTP(S) upstreams; urlopen would otherwise also accept file:// and friends.
+for _name, _url in (("KC_INFO_URL", INFO_URL), ("KC_CONTROL_URL", CONTROL_URL)):
+    if not _url.startswith(("http://", "https://")):
+        raise SystemExit(f"{_name} must start with http:// or https:// (got {_url!r}).")
+# All interfaces by default: inside a container the published port arrives on eth0, not loopback.
+BIND = os.environ.get("BIND", "0.0.0.0")  # nosec B104
 PORT = int(os.environ.get("PORT", "8090"))
 TIMEOUT = float(os.environ.get("KC_TIMEOUT", "10"))
 STARTED = time.time()
@@ -88,12 +95,13 @@ class Handler(SimpleHTTPRequestHandler):
         if body is not None:
             req.add_header("Content-Type", self.headers.get("Content-Type", "text/yaml"))
         try:
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            # Upstream scheme is restricted to http(s) at startup.
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:  # nosec B310
                 self._send(resp.status, resp.read())
         except urllib.error.HTTPError as e:
             self._send(e.code, e.read() or b'{"error": "upstream error"}')
-        except Exception as e:  # unreachable host, timeout, DNS failure
-            msg = "upstream unreachable: %s" % getattr(e, "reason", e)
+        except (OSError, http.client.HTTPException) as e:  # unreachable host, timeout, DNS failure, bad response
+            msg = f"upstream unreachable: {getattr(e, 'reason', e)}"
             self._send(502, json.dumps({"error": msg, "target": base}).encode())
 
     def _send(self, status, payload):
@@ -107,4 +115,4 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     print(f"King Coopa dashboard on :{PORT}  info -> {INFO_URL}  controls -> {CONTROL_URL}", flush=True)
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    ThreadingHTTPServer((BIND, PORT), Handler).serve_forever()

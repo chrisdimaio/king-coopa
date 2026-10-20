@@ -1,0 +1,13 @@
+{
+  "root": true,
+  "extends": "eslint:recommended",
+  "env": { "browser": true, "es2020": true },
+  "parserOptions": { "ecmaVersion": 2020 },
+  "globals": { "CodeMirror": "readonly", "jsyaml": "readonly" },
+  "rules": {
+    "eqeqeq": ["error", "smart"],
+    "no-var": "error",
+    "prefer-const": "warn",
+    "no-unused-vars": "warn"
+  }
+}

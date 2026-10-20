@@ -5,6 +5,8 @@
 
 Raspberry PI powered automatic chicken coop door opener!
 
+There's also a web dashboard for monitoring and controlling the door; see [dashboard/README.md](dashboard/README.md).
+
 ## Features
 
 ### Location Based
