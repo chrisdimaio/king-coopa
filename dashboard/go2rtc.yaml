@@ -1,0 +1,18 @@
+# go2rtc config for the optional coop camera (used by the "camera" compose profile).
+# No secrets here: ${...} are filled in by go2rtc from its environment (.env) when it loads.
+api:
+  # Loopback only. go2rtc's API exposes the camera login, so it is never published; it shares the
+  # dashboard's network namespace and server.py relays just the live feed and snapshots.
+  listen: "127.0.0.1:1984"
+rtsp:
+  listen: ""          # don't re-serve RTSP
+webrtc:
+  listen: ""          # the dashboard uses MSE over a WebSocket instead
+srtp:
+  listen: ""
+log:
+  level: warn
+streams:
+  # Tapo: stream2 = 720p, stream1 = full resolution. TAPO_USER / TAPO_PASS must be URL-encoded.
+  coop_sd: rtsp://${TAPO_USER}:${TAPO_PASS}@${KC_CAMERA_HOST}:554/stream2
+  coop_hd: rtsp://${TAPO_USER}:${TAPO_PASS}@${KC_CAMERA_HOST}:554/stream1

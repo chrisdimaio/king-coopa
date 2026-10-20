@@ -2,12 +2,19 @@
 
 The proxy avoids CORS (the Flask API sends no CORS headers) and lets info and
 controls point at different targets while the dashboard is being built.
+
+Optional coop camera: when KC_GO2RTC_URL is set, the live feed and snapshots are relayed from a
+go2rtc instance that is only reachable from here (its API exposes the camera login, so it must
+never be published). Only the two named streams and these two operations are passed through.
 """
 import http.client
 import json
 import os
+import socket
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -31,8 +38,11 @@ if not INFO_URL:
     raise SystemExit("KC_INFO_URL is not set (e.g. http://<pi-address>:8080). See dashboard/.env.example.")
 CONTROL_URL = os.environ.get("KC_CONTROL_URL", "http://fake-king-coopa.invalid:8080").rstrip("/")
 # Only plain HTTP(S) upstreams; urlopen would otherwise also accept file:// and friends.
-for _name, _url in (("KC_INFO_URL", INFO_URL), ("KC_CONTROL_URL", CONTROL_URL)):
-    if not _url.startswith(("http://", "https://")):
+# Camera relay (optional). go2rtc stream names for each quality the UI offers.
+GO2RTC_URL = os.environ.get("KC_GO2RTC_URL", "").rstrip("/")
+CAMERA_STREAMS = {"sd": "coop_sd", "hd": "coop_hd"}
+for _name, _url in (("KC_INFO_URL", INFO_URL), ("KC_CONTROL_URL", CONTROL_URL), ("KC_GO2RTC_URL", GO2RTC_URL)):
+    if _url and not _url.startswith(("http://", "https://")):
         raise SystemExit(f"{_name} must start with http:// or https:// (got {_url!r}).")
 # All interfaces by default: inside a container the published port arrives on eth0, not loopback.
 BIND = os.environ.get("BIND", "0.0.0.0")  # nosec B104
@@ -57,6 +67,9 @@ class Handler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=STATIC_DIR, **kwargs)
 
     def do_GET(self):
+        url = urllib.parse.urlsplit(self.path)
+        if url.path.startswith("/api/camera"):
+            return self._camera(url)
         if self.path == "/status":
             # Health of the dashboard itself, for Homepage / Uptime Kuma. Never contacts King Coopa,
             # so a Pi outage doesn't make the dashboard look down.
@@ -104,9 +117,69 @@ class Handler(SimpleHTTPRequestHandler):
             msg = f"upstream unreachable: {getattr(e, 'reason', e)}"
             self._send(502, json.dumps({"error": msg, "target": base}).encode())
 
-    def _send(self, status, payload):
+    # ---- camera relay ----
+    def _camera(self, url):
+        if url.path == "/api/camera":
+            info = {"enabled": bool(GO2RTC_URL), "qualities": list(CAMERA_STREAMS)}
+            return self._send(200, json.dumps(info).encode())
+        if not GO2RTC_URL:
+            return self._send(404, b'{"error": "camera not configured"}')
+        quality = urllib.parse.parse_qs(url.query).get("q", ["sd"])[0]
+        src = CAMERA_STREAMS.get(quality)
+        if src is None:
+            return self._send(400, b'{"error": "unknown quality"}')
+        if url.path == "/api/camera/snapshot":
+            return self._camera_snapshot(src)
+        if url.path == "/api/camera/ws" and self.headers.get("Upgrade", "").lower() == "websocket":
+            return self._camera_ws(src)
+        return self._send(404, b'{"error": "unknown route"}')
+
+    def _camera_snapshot(self, src):
+        req = urllib.request.Request(f"{GO2RTC_URL}/api/frame.jpeg?src={src}")
+        try:
+            # Scheme restricted to http(s) at startup.
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:  # nosec B310
+                self._send(200, resp.read(), "image/jpeg")
+        except (OSError, http.client.HTTPException):
+            self._send(502, b'{"error": "camera unavailable"}')
+
+    def _camera_ws(self, src):
+        """Splice the browser's WebSocket to go2rtc's /api/ws for one fixed stream."""
+        up = urllib.parse.urlsplit(GO2RTC_URL)
+        try:
+            upstream = socket.create_connection((up.hostname, up.port or 80), timeout=TIMEOUT)
+        except OSError:
+            return self._send(502, b'{"error": "camera relay unavailable"}')
+        # Replay the handshake with the fixed upstream path. The client's own headers (Host, Origin,
+        # Sec-WebSocket-*) are kept as-is so go2rtc's same-origin check sees a matching pair.
+        head = [f"GET /api/ws?src={src} HTTP/1.1"] + [f"{k}: {v}" for k, v in self.headers.items()]
+        upstream.sendall(("\r\n".join(head) + "\r\n\r\n").encode("latin-1"))
+        upstream.settimeout(None)
+        self.connection.settimeout(None)
+
+        def pump(src_sock, dst_sock):
+            try:
+                while data := src_sock.recv(65536):
+                    dst_sock.sendall(data)
+            except OSError:
+                pass
+            finally:
+                for s in (src_sock, dst_sock):
+                    try:
+                        s.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
+
+        downstream = threading.Thread(target=pump, args=(upstream, self.connection), daemon=True)
+        downstream.start()
+        pump(self.connection, upstream)
+        downstream.join()
+        upstream.close()
+        self.close_connection = True
+
+    def _send(self, status, payload, content_type="application/json"):
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
@@ -114,5 +187,6 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"King Coopa dashboard on :{PORT}  info -> {INFO_URL}  controls -> {CONTROL_URL}", flush=True)
+    camera = f"  camera -> {GO2RTC_URL}" if GO2RTC_URL else ""
+    print(f"King Coopa dashboard on :{PORT}  info -> {INFO_URL}  controls -> {CONTROL_URL}{camera}", flush=True)
     ThreadingHTTPServer((BIND, PORT), Handler).serve_forever()

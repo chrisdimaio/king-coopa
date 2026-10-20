@@ -16,6 +16,11 @@ A small web dashboard for the [King Coopa](../README.md) chicken-coop door contr
 - **Controls**: Open, Close, Restart. Each one shows a confirmation with the target, the last known door state and how old that reading is, plus warnings (for example, the door is already closed or currently moving). Every action, including sending a config, needs a confirmation checkbox ticked first.
 - **Reconfigure**: a YAML editor prefilled from the live config, with lint-as-you-type (syntax, required keys, types, ranges, duplicate pins, `api_server` block). Send is blocked while there are errors, and the confirmation shows a key-by-key diff.
 - **Current config**: the live config as read-only, highlighted YAML.
+- **Coop camera (optional)**: a live feed from a Tapo camera (tested with the C216), relayed through [go2rtc](https://github.com/AlexxIT/go2rtc) with no re-encoding:
+  - 720p by default, with an HD switch and a full-resolution Snapshot button
+  - plays in the page with a small built-in player, with well under a second of delay
+  - shows a "camera offline" message and reconnects with backoff when the feed drops
+  - stops pulling video while the tab is hidden, to spare the coop's Wi-Fi
 - **`/status` endpoint** for Homepage and Uptime Kuma, plus a Docker `HEALTHCHECK`.
 - **Dark theme by default**, with a light/dark toggle that each browser remembers.
 
@@ -27,6 +32,13 @@ browser ──► dashboard (server.py, :8090) ──► King Coopa API on the P
              ├─ GET  /api/info          → KC_INFO_URL/info
              └─ PUT  /api/open|close|restart
                 POST /api/reconfigure   → KC_CONTROL_URL/...
+```
+
+With the camera enabled, a go2rtc container shares the dashboard container's network and listens only on `127.0.0.1:1984` there:
+
+```
+browser ──WebSocket /api/camera/ws?q=sd|hd──► server.py ──► go2rtc (127.0.0.1:1984) ──RTSP──► camera :554
+        ──GET /api/camera/snapshot?q=…─────►
 ```
 
 `server.py` is a dependency-free Python proxy. It exists because the controller's Flask API sends no CORS headers, so a browser can't call it directly. It also lets **info** and **controls** point at different hosts. Until you're ready, keep controls pointed at a fake `.invalid` host so the buttons can't move the real door.
@@ -44,6 +56,9 @@ All settings are environment variables. For local runs they can also live in `da
 | `PORT` | no | `8090` | Port the dashboard listens on. |
 | `BIND` | no | `0.0.0.0` | Interface to listen on. Use `127.0.0.1` for local-only. |
 | `KC_TIMEOUT` | no | `10` | Upstream request timeout, in seconds. |
+| `KC_GO2RTC_URL` | camera only | — | The go2rtc relay, normally `http://127.0.0.1:1984`. Leave unset to hide the camera card. |
+| `KC_CAMERA_HOST` | camera only | — | Camera address. Used by go2rtc, not the dashboard. |
+| `TAPO_USER`, `TAPO_PASS` | camera only | — | The camera's Tapo **Camera Account** (Tapo app → camera → Advanced settings → Camera Account), **URL-encoded** (`@` → `%40`, `$` → `%24`). Used by go2rtc. |
 
 Both URLs must be `http://` or `https://`; the server refuses to start otherwise. The Controls card shows a **fake target** badge while `KC_CONTROL_URL` is a `.invalid` host.
 
@@ -102,6 +117,18 @@ python3 dashboard/server.py
 
 Then open `http://localhost:8090`.
 
+### Adding the camera
+
+1. In the Tapo app, create a **Camera Account** for the camera (Advanced settings → Camera Account).
+2. Add `KC_GO2RTC_URL=http://127.0.0.1:1984`, `KC_CAMERA_HOST`, `TAPO_USER` and `TAPO_PASS` to `.env` or the stack's environment variables. URL-encode the username and password.
+3. Start with the camera profile:
+
+```bash
+docker compose --profile camera up -d --build
+```
+
+The camera card appears once `KC_GO2RTC_URL` is set. `dashboard/go2rtc.yaml` holds no secrets; go2rtc fills in the `${...}` values from its environment.
+
 ### Verify
 
 ```bash
@@ -145,6 +172,9 @@ The response looks like `{"status": "ok", "service": "king-coopa-dashboard", ...
 | GET | `/api/info` | Proxied `GET /info` |
 | PUT | `/api/open`, `/api/close`, `/api/restart` | Proxied controls |
 | POST | `/api/reconfigure` | Proxied `POST /reconfigure` (body: YAML, max 64 KB) |
+| GET | `/api/camera` | `{"enabled": bool, "qualities": ["sd", "hd"]}` |
+| GET | `/api/camera/snapshot?q=sd\|hd` | Current frame as JPEG |
+| GET (WebSocket) | `/api/camera/ws?q=sd\|hd` | Live feed: go2rtc's MSE protocol, relayed for that one stream |
 
 If the upstream can't be reached, these return `502` with `{"error": "...", "target": "..."}`.
 
@@ -152,6 +182,8 @@ If the upstream can't be reached, these return `502` with `{"error": "...", "tar
 
 - **The dashboard has no login.** Anyone who can reach port 8090 can see the config. Once `KC_CONTROL_URL` is live, they can also open or close the door. Keep it on your LAN or behind an authenticating reverse proxy.
 - `/api/targets` shows the configured upstream URLs to anyone who can load the page.
+- **Never publish go2rtc's port.** Its API returns the camera's RTSP address, login included. In this setup it listens only on loopback inside the dashboard container, and `server.py` passes through just the live feed and snapshots for the two named streams.
+- Anyone who can reach the dashboard can watch the camera.
 - **The controller's own API is also unauthenticated.** Its `/reconfigure` parses YAML with `yaml.load(..., Loader=FullLoader)` on PyYAML 5.3.1, which is affected by CVE-2020-14343. Switching to `yaml.safe_load` and upgrading PyYAML on the Pi is recommended before exposing it beyond a trusted network.
 - Don't commit real addresses or coordinates. `.env` and `.sensitive-patterns` are gitignored, and the pre-push check below enforces this.
 
@@ -197,15 +229,17 @@ Follow these steps in order. Ask the user for anything in angle brackets; never 
    - where the dashboard should run (Portainer, Docker or local)
    - whether the controls should be live, or stay on the fake target (the default)
 2. **Check the Pi is reachable** from the machine that will run the dashboard with `curl -s http://<pi-address>:8080/info`. It should return JSON with `door_opener`, `config` and `system`. Only call `GET /info`. Never call `/open`, `/close`, `/restart` or `/reconfigure` to test; they move the real door or rewrite its config.
-3. **Configure without committing secrets:**
+3. **Camera (optional):** ask the user to enter the camera account on the host themselves (it's a password). Check the RTSP port with a plain TCP connect, and check the stream only through go2rtc on loopback. Never print go2rtc's `/api/streams`, because it contains the login.
+4. **Configure without committing secrets:**
    - Local or Docker Compose: write `dashboard/.env` from `.env.example`.
    - Portainer: set the variables in the stack.
    - Never put `<pi-address>` in a tracked file.
-4. **Deploy** using one of the setup options above.
-5. **Verify:**
+5. **Deploy** using one of the setup options above.
+6. **Verify:**
    - `/status` returns `"status": "ok"`.
    - `/api/info` returns live data.
    - The page shows **online**.
    - With controls on the fake target, clicking Open and confirming logs an `upstream unreachable` error in Activity. That's expected, and proves the controls aren't live.
-6. **Go live, only if the user explicitly asks:** set `KC_CONTROL_URL` to the Pi URL and redeploy. The Controls badge changes from **fake target** to **live**.
-7. **Optional:** add the Uptime Kuma and Homepage entries from [Monitoring](#monitoring).
+   - If the camera is on, its card shows **live · 720p**.
+7. **Go live, only if the user explicitly asks:** set `KC_CONTROL_URL` to the Pi URL and redeploy. The Controls badge changes from **fake target** to **live**.
+8. **Optional:** add the Uptime Kuma and Homepage entries from [Monitoring](#monitoring).

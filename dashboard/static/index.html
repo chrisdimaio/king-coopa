@@ -147,6 +147,21 @@
   dialog input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); }
   dialog .row { justify-content: flex-end; margin-top: 20px; }
 
+  /* ---- coop camera ---- */
+  .cam-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+              margin-bottom: 14px; }
+  .cam-head h2 { margin: 0; }
+  .cam-frame { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden;
+               border: 1px solid var(--line); }
+  .cam-frame video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .cam-overlay { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px;
+                 color: #cbd5e1; font-size: 14px; background: rgb(0 0 0 / .55); }
+  .cam-overlay[hidden] { display: none; }
+  .seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: var(--card-2); padding: 7px 12px; }
+  .seg button + button { border-left: 1px solid var(--line-strong); }
+  .seg button.active { background: var(--accent-soft); color: var(--accent); }
+
   /* ---- CPU temp bar ---- */
   .temp-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .temp-bar { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line-strong); border-radius: 6px;
@@ -219,6 +234,23 @@
       <p class="muted">Controls go to <span id="control-target">—</span></p>
       <h2 style="margin-top:16px">Activity</h2>
       <pre id="log"></pre>
+    </section>
+
+    <section class="card span2" id="camera-card" hidden>
+      <div class="cam-head">
+        <h2>Coop camera <span id="cam-badge" class="badge">connecting…</span></h2>
+        <div class="row">
+          <div class="seg" role="group" aria-label="Camera quality">
+            <button type="button" data-q="sd" class="active">720p</button>
+            <button type="button" data-q="hd">HD</button>
+          </div>
+          <button type="button" id="cam-snapshot" title="Open a full-resolution snapshot">Snapshot</button>
+        </div>
+      </div>
+      <div class="cam-frame">
+        <video id="cam-video" muted playsinline autoplay></video>
+        <div id="cam-overlay" class="cam-overlay">Connecting…</div>
+      </div>
     </section>
 
     <section class="card">
@@ -518,6 +550,115 @@ function applyTheme(theme) {
 }
 $("theme-toggle").onclick = () => applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
 applyTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+
+// ---- coop camera: MSE over a WebSocket relayed by the dashboard to go2rtc ----
+// Protocol (go2rtc /api/ws): send {"type":"mse","value":"<codecs we can play>"}, receive
+// {"type":"mse","value":"<mime>"}, then binary fMP4 segments.
+const CAM_CODECS = ["avc1.640029", "avc1.64002A", "avc1.640033", "hvc1.1.6.L153.B0", "mp4a.40.2", "mp4a.40.5", "flac", "opus"];
+const CAM_LABEL = { sd: "720p", hd: "HD" };
+const cam = { ws: null, ms: null, sb: null, queue: [], quality: "sd", lastData: 0, live: false, retry: 0, timer: null };
+
+function camShow(badge, badgeClass, overlay) {
+  $("cam-badge").textContent = badge;
+  $("cam-badge").className = "badge " + badgeClass;
+  $("cam-overlay").hidden = !overlay;
+  $("cam-overlay").textContent = overlay || "";
+}
+
+function camStop() {
+  clearTimeout(cam.timer);
+  if (cam.ws) { cam.ws.onclose = null; cam.ws.onmessage = null; cam.ws.close(); }
+  cam.ws = null; cam.ms = null; cam.sb = null; cam.queue = []; cam.live = false;
+  const v = $("cam-video");
+  v.removeAttribute("src"); v.load();
+}
+
+function camFail(reason) {
+  camStop();
+  const delay = Math.min(30, 5 * 2 ** cam.retry++);
+  camShow("offline", "err", `Camera offline (${reason}). Retrying in ${delay}s…`);
+  cam.timer = setTimeout(camStart, delay * 1000);
+}
+
+function camStart() {
+  camStop();
+  if (document.hidden) return;   // don't pull video over the coop Wi-Fi for a background tab
+  const MS = window.ManagedMediaSource || window.MediaSource;
+  if (!MS) { camShow("unsupported", "err", "This browser can't play the live feed. Use Snapshot instead."); return; }
+  camShow("connecting…", "", "Connecting…");
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/camera/ws?q=${cam.quality}`);
+  ws.binaryType = "arraybuffer";
+  cam.ws = ws; cam.lastData = Date.now();
+  ws.onopen = () => {
+    const codecs = CAM_CODECS.filter((c) => MS.isTypeSupported(`video/mp4; codecs="${c}"`)).join();
+    ws.send(JSON.stringify({ type: "mse", value: codecs }));
+  };
+  ws.onmessage = (ev) => {
+    if (typeof ev.data === "string") {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === "mse") camSetup(MS, msg.value);
+      else if (msg.type === "error") camFail(msg.value);
+      return;
+    }
+    cam.lastData = Date.now();
+    cam.queue.push(ev.data);
+    camPump();
+  };
+  ws.onclose = () => camFail("disconnected");
+}
+
+function camSetup(MS, mime) {
+  const v = $("cam-video"), ms = new MS();
+  cam.ms = ms;
+  if (MS === window.ManagedMediaSource) v.disableRemotePlayback = true;
+  v.src = URL.createObjectURL(ms);
+  ms.addEventListener("sourceopen", () => {
+    if (cam.ms !== ms) return;
+    try { cam.sb = ms.addSourceBuffer(mime); } catch { camFail("unsupported video format"); return; }
+    cam.sb.mode = "segments";
+    cam.sb.addEventListener("updateend", camPump);
+    camPump();
+  }, { once: true });
+}
+
+function camPump() {
+  const sb = cam.sb, v = $("cam-video");
+  if (!sb || sb.updating) return;
+  if (v.buffered.length) {
+    const start = v.buffered.start(0), end = v.buffered.end(v.buffered.length - 1);
+    if (end - start > 20) { sb.remove(start, end - 10); return; }   // keep memory flat
+    if (end - v.currentTime > 1.5) v.currentTime = end - 0.3;        // stay at the live edge
+  }
+  if (!cam.queue.length) return;
+  const total = cam.queue.reduce((n, b) => n + b.byteLength, 0), buf = new Uint8Array(total);
+  let off = 0;
+  for (const b of cam.queue) { buf.set(new Uint8Array(b), off); off += b.byteLength; }
+  cam.queue = [];
+  try { sb.appendBuffer(buf); } catch { camFail("playback error"); return; }
+  if (v.paused) v.play().catch(() => { /* autoplay blocked; muted video normally plays */ });
+  if (!cam.live) { cam.live = true; cam.retry = 0; camShow(`live · ${CAM_LABEL[cam.quality]}`, "ok", ""); }
+}
+
+// No video for a while (camera or Wi-Fi dropped without closing the socket) -> reconnect.
+setInterval(() => { if (cam.ws && Date.now() - cam.lastData > 15000) camFail("no video"); }, 5000);
+document.addEventListener("visibilitychange", () => {
+  if ($("camera-card").hidden) return;
+  if (document.hidden) { camStop(); camShow("paused", "", "Paused while the tab is hidden."); }
+  else { cam.retry = 0; camStart(); }
+});
+for (const b of document.querySelectorAll(".seg button")) {
+  b.onclick = () => {
+    cam.quality = b.dataset.q;
+    for (const o of document.querySelectorAll(".seg button")) o.classList.toggle("active", o === b);
+    cam.retry = 0; camStart();
+  };
+}
+$("cam-snapshot").onclick = () => window.open(`/api/camera/snapshot?q=hd&t=${Date.now()}`, "_blank", "noopener");
+fetch("/api/camera").then((r) => r.json()).then((c) => {
+  if (!c.enabled) return;
+  $("camera-card").hidden = false;
+  camStart();
+}).catch(() => { /* camera not configured on this server */ });
 
 // ---- info polling ----
 async function refresh() {

@@ -13,4 +13,23 @@ services:
       KC_INFO_URL: ${KC_INFO_URL:?set KC_INFO_URL to the King Coopa API, e.g. http://<pi-address>:8080}
       # Controls (open/close/restart/reconfigure). Fake host unless KC_CONTROL_URL is set.
       KC_CONTROL_URL: ${KC_CONTROL_URL:-http://fake-king-coopa.invalid:8080}
+      # Coop camera: set to http://127.0.0.1:1984 and start with --profile camera.
+      KC_GO2RTC_URL: ${KC_GO2RTC_URL:-}
+    restart: unless-stopped
+
+  # Optional coop camera relay: docker compose --profile camera up -d --build
+  go2rtc:
+    profiles: ["camera"]
+    image: alexxit/go2rtc:1.9.9
+    container_name: king-coopa-go2rtc
+    # Shares the dashboard's network namespace: go2rtc listens on 127.0.0.1 there and is never published.
+    network_mode: "service:king-coopa-dashboard"
+    depends_on:
+      - king-coopa-dashboard
+    environment:
+      KC_CAMERA_HOST: ${KC_CAMERA_HOST:-}
+      TAPO_USER: ${TAPO_USER:-}
+      TAPO_PASS: ${TAPO_PASS:-}
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
     restart: unless-stopped
