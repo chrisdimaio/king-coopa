@@ -40,7 +40,7 @@ All settings are environment variables. For local runs they can also live in `da
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `KC_INFO_URL` | **yes** | — | King Coopa API used for live info, e.g. `http://<pi-address>:8080`. The server won't start without it. |
-| `KC_CONTROL_URL` | no | `http://fake-king-coopa.invalid:8080` | Where open, close, restart and reconfigure go. Set it to the same value as `KC_INFO_URL` to make the controls live. |
+| `KC_CONTROL_URL` | no | `http://fake-king-coopa.invalid:8080` | Where open, close, restart and reconfigure go. Set it to the same value as `KC_INFO_URL` to make the controls live. In Docker it's also a build arg (`--build-arg KC_CONTROL_URL=...`) that sets the image's default; a runtime `-e` or stack variable overrides it. |
 | `PORT` | no | `8090` | Port the dashboard listens on. |
 | `BIND` | no | `0.0.0.0` | Interface to listen on. Use `127.0.0.1` for local-only. |
 | `KC_TIMEOUT` | no | `10` | Upstream request timeout, in seconds. |

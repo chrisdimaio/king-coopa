@@ -1,6 +1,9 @@
 services:
   king-coopa-dashboard:
-    build: .
+    build:
+      context: .
+      args:
+        KC_CONTROL_URL: ${KC_CONTROL_URL:-http://fake-king-coopa.invalid:8080}
     image: king-coopa-dashboard
     container_name: king-coopa-dashboard
     ports:
@@ -8,6 +11,6 @@ services:
     environment:
       # Set in a .env next to this file, or in Portainer's stack environment variables.
       KC_INFO_URL: ${KC_INFO_URL:?set KC_INFO_URL to the King Coopa API, e.g. http://<pi-address>:8080}
-      # Controls (open/close/restart/reconfigure) go to a fake host for now.
-      KC_CONTROL_URL: http://fake-king-coopa.invalid:8080
+      # Controls (open/close/restart/reconfigure). Fake host unless KC_CONTROL_URL is set.
+      KC_CONTROL_URL: ${KC_CONTROL_URL:-http://fake-king-coopa.invalid:8080}
     restart: unless-stopped
