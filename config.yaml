@@ -1,5 +1,6 @@
-longitude: -71.1681156
-latitude: 42.8836989
+# Example location (New York City) — set your coop's coordinates.
+longitude: -74.0060
+latitude: 40.7128
 sunrise_offset: 60
 sunset_offset: 45
 open_pin: 20

@@ -12,8 +12,8 @@ Raspberry PI powered automatic chicken coop door opener!
 Door is opened and closed at sunrise and sunset, respectively, based on your coops location!
 
 ```yaml
-longitude: -71.1681156
-latitude: 42.8836989
+longitude: -74.0060
+latitude: 40.7128
 ```
 
 ### Fine Tuning

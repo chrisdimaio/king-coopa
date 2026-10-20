@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>King Coopa</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231f9e91' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M6.6 7.3 6.8 8.6C5.3 10 4.2 11.8 4.2 14.2c0 3.4 3.2 5.8 7.6 5.8 4.6 0 8-2.9 8-7.4V6l-3.4 3.1-1.7-3.2-1.8 3.5c-1.3.2-2.4-.3-3-1.1.4-.5.7-1.1.7-1.8a3 3 0 0 0-5.7-1.3'/><path d='M6.2 5.4 4.3 6.7l2.3.6'/><path d='M7.1 3.7c-.2-1 .9-1.6 1.5-.8.4-1 1.8-.9 1.8.2.7-.4 1.5.2 1.2 1'/><path d='M9 14.1c1.5 2 4.4 2.2 6.4.5'/><path d='M10.3 20v2M13.7 20v2'/><circle cx='8.5' cy='6.1' r='.7' fill='%231f9e91' stroke='none'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/lint.min.css">
+<script>
+  try { if (localStorage.getItem("kc-theme") === "light") document.documentElement.dataset.theme = "light"; } catch {}
+</script>
+<style>
+  /* ---- theme ---- */
+  /* Dark is the default theme. */
+  :root {
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: dark;
+    --bg: #0a0e13; --bg-glow: rgb(31 158 145 / .05); --card: #11151c; --card-2: #0d1117;
+    --text: #e6e9ef; --muted: #8590a2; --line: #1e2530; --line-strong: #2b3442;
+    --accent: #1f9e91; --accent-2: #3a78b8; --accent-ink: #eef7f6; --accent-soft: rgb(31 158 145 / .12);
+    --btn-1: #16756c; --btn-2: #2d5f94;
+    --ok: #47b97c; --warn: #d9a43a; --err: #db6b6b; --num: #93a0d8;
+    --shadow: 0 1px 0 rgb(255 255 255 / .03) inset, 0 10px 30px rgb(0 0 0 / .35);
+    --g-ok: #3fa877; --g-warm: #c9a334; --g-hot: #cf7a3c; --g-crit: #cc5a5a;
+  }
+  /* Light theme, opt-in via the header toggle. */
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f1f4f6; --bg-glow: rgb(17 110 102 / .06); --card: #ffffff; --card-2: #f8fafc;
+    --text: #0f172a; --muted: #64748b; --line: #e2e8f0; --line-strong: #cbd5e1;
+    --accent: #146c64; --accent-2: #2b5a92; --accent-ink: #ffffff; --accent-soft: rgb(20 108 100 / .09);
+    --btn-1: #146c64; --btn-2: #2b5a92;
+    --ok: #237a4b; --warn: #a8650f; --err: #b83a3a; --num: #4a4fa8;
+    --shadow: 0 1px 2px rgb(15 23 42 / .04), 0 8px 24px rgb(15 23 42 / .06);
+    --g-ok: #2f9467; --g-warm: #b8931f; --g-hot: #c46a2b; --g-crit: #b94545;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; color: var(--text);
+         background: radial-gradient(1200px 500px at 10% -10%, var(--bg-glow), transparent 60%), var(--bg);
+         font: 15px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+         -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01"; }
+  main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 56px; }
+
+  /* ---- header ---- */
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  .brand { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 200px; }
+  .logo { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+          background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+  .logo svg { width: 28px; height: 28px; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -.02em; margin: 0; }
+  .subtitle { font-size: 12px; color: var(--muted); margin-top: -2px; }
+  h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .09em; color: var(--muted);
+       margin: 0 0 14px; display: flex; align-items: center; gap: 8px; }
+
+  /* ---- layout ---- */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px;
+          box-shadow: var(--shadow); min-width: 0; }
+  .span2 { grid-column: 1 / -1; }
+  .icon-btn { width: 38px; height: 38px; padding: 0; display: grid; place-items: center; }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  /* ---- door state: colored by whether it matches the schedule ---- */
+  .state { display: inline-block; font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1;
+           color: var(--muted); }
+  .state.ok { color: var(--ok); }
+  .state.moving { color: var(--warn); }
+  .state.alarm { color: #fff; background: var(--err); padding: 2px 14px; border-radius: 10px;
+                 animation: alarm-blink 1s steps(1, end) infinite; }
+  @keyframes alarm-blink { 50% { background: transparent; color: var(--err); } }
+  @media (prefers-reduced-motion: reduce) { .state.alarm { animation: none; } }
+  #state-note { margin-top: 6px; font-size: 13px; color: var(--muted); }
+  #state-note.alarm { color: var(--err); font-weight: 600; }
+
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; margin: 16px 0 0; }
+  dt { color: var(--muted); font-size: 13px; align-self: center; }
+  dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; font-weight: 500; }
+  .muted { color: var(--muted); font-size: 13px; font-weight: 400; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  /* ---- controls ---- */
+  button, select { font: inherit; font-size: 14px; font-weight: 500; color: var(--text); background: var(--card-2);
+                   border: 1px solid var(--line-strong); border-radius: 10px; padding: 8px 14px; cursor: pointer;
+                   transition: border-color .15s, background .15s, transform .05s, box-shadow .15s; }
+  button:hover:not(:disabled), select:hover { border-color: var(--muted); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { color: var(--accent-ink); border-color: transparent;
+                   background: linear-gradient(135deg, var(--btn-1), var(--btn-2));
+                   box-shadow: 0 3px 10px -4px color-mix(in srgb, var(--accent) 35%, transparent); }
+  button.primary:hover:not(:disabled) { filter: brightness(1.06); border-color: transparent; }
+  button.danger { color: var(--err); border-color: color-mix(in srgb, var(--err) 40%, transparent);
+                  background: color-mix(in srgb, var(--err) 8%, transparent); }
+  button.danger:hover:not(:disabled) { border-color: var(--err); }
+  .badge { font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: none; padding: 3px 10px;
+           border-radius: 99px; border: 1px solid var(--line-strong); color: var(--muted); background: var(--card-2);
+           display: inline-flex; align-items: center; gap: 6px; }
+  .badge.ok::before, .badge.err::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge.ok::before { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+  .badge.fake { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+                background: color-mix(in srgb, var(--warn) 10%, transparent); }
+  .badge.err { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, transparent); }
+  .badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+              background: color-mix(in srgb, var(--ok) 10%, transparent); }
+
+  /* ---- code ---- */
+  .CodeMirror { height: 340px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--card-2);
+                color: var(--text); font: 13px/1.6 var(--mono); }
+  .CodeMirror-focused { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .CodeMirror-gutters { background: var(--card-2); border-right: 1px solid var(--line); border-radius: 12px 0 0 12px; }
+  .CodeMirror-cursor { border-left-color: var(--accent); }
+  .CodeMirror-linenumber { color: var(--muted); opacity: .7; }
+  .CodeMirror-selected, .CodeMirror-focused .CodeMirror-selected { background: var(--accent-soft); }
+  .cm-s-default .cm-atom, .cm-s-default .cm-keyword { color: var(--accent); }
+  .cm-s-default .cm-number { color: var(--num); } .cm-s-default .cm-string { color: var(--ok); }
+  .cm-s-default .cm-meta, .cm-s-default .cm-def { color: var(--muted); }
+  #problems { list-style: none; padding: 0; margin: 12px 0; font-size: 13px; }
+  #problems li { padding: 2px 0; } #problems .error { color: var(--err); } #problems .warning { color: var(--warn); }
+  #log { font: 12px/1.6 var(--mono); max-height: 180px; overflow: auto; margin: 0; white-space: pre-wrap; color: var(--muted); }
+  #log:empty::before { content: "No actions yet."; font-family: Inter, system-ui, sans-serif; }
+  #log .err { color: var(--err); } #log .ok { color: var(--ok); }
+  /* Live config: same highlighting, no editor chrome. */
+  .CodeMirror.readonly { height: auto; border: 1px solid var(--line); background: transparent; cursor: default;
+                         padding: 10px 14px; box-shadow: none; }
+  .CodeMirror.readonly .CodeMirror-scroll { max-height: 340px; }
+  .CodeMirror.readonly .CodeMirror-lines { padding: 0; }
+  .CodeMirror.readonly pre.CodeMirror-line { padding: 0; }
+
+  /* ---- confirm dialog ---- */
+  dialog { border: 1px solid var(--line-strong); border-radius: 18px; background: var(--card); color: var(--text);
+           padding: 24px; width: min(500px, calc(100vw - 32px)); box-shadow: 0 30px 80px rgb(0 0 0 / .45); }
+  dialog::backdrop { background: rgb(5 8 12 / .6); backdrop-filter: blur(4px); }
+  dialog h3 { margin: 0 0 10px; font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+  dialog ul { margin: 8px 0; padding-left: 18px; font-size: 14px; }
+  dialog li { margin: 4px 0; overflow-wrap: anywhere; }
+  dialog .warn { color: var(--warn); } dialog .danger-text { color: var(--err); }
+  dialog .diff { font: 13px/1.6 var(--mono); list-style: none; padding: 10px 12px; background: var(--card-2);
+                 border: 1px solid var(--line); border-radius: 10px; }
+  dialog .diff del { color: var(--err); } dialog .diff ins { color: var(--ok); text-decoration: none; }
+  dialog label.ack { display: flex; gap: 10px; align-items: center; margin-top: 14px; font-size: 14px; }
+  dialog label.ack[hidden] { display: none; }
+  dialog input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); }
+  dialog .row { justify-content: flex-end; margin-top: 20px; }
+
+  /* ---- CPU temp bar ---- */
+  .temp-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .temp-bar { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line-strong); border-radius: 6px;
+              background: var(--card-2); }
+  .temp-bar i { width: 6px; height: 14px; border-radius: 2px; opacity: .18; }
+  .temp-bar i.on { opacity: 1; }
+  .temp-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="url(#chick-grad)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <defs><linearGradient id="chick-grad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="var(--accent-2)"/><stop offset="1" stop-color="var(--accent)"/>
+          </linearGradient></defs>
+          <path d="M6.6 7.3 6.8 8.6C5.3 10 4.2 11.8 4.2 14.2c0 3.4 3.2 5.8 7.6 5.8 4.6 0 8-2.9 8-7.4V6l-3.4 3.1-1.7-3.2-1.8 3.5c-1.3.2-2.4-.3-3-1.1.4-.5.7-1.1.7-1.8a3 3 0 0 0-5.7-1.3"/><path d="M6.2 5.4 4.3 6.7l2.3.6"/><path d="M7.1 3.7c-.2-1 .9-1.6 1.5-.8.4-1 1.8-.9 1.8.2.7-.4 1.5.2 1.2 1"/><path d="M9 14.1c1.5 2 4.4 2.2 6.4.5"/><path d="M10.3 20v2M13.7 20v2"/>
+          <circle cx="8.5" cy="6.1" r=".75" fill="var(--accent)" stroke="none"/>
+        </svg>
+      </div>
+      <div>
+        <h1>King Coopa</h1>
+        <div class="subtitle">Coop door controller</div>
+      </div>
+    </div>
+    <span id="conn" class="badge">connecting…</span>
+    <label class="row muted">Refresh
+      <select id="interval">
+        <option value="10">10s</option><option value="30" selected>30s</option>
+        <option value="60">60s</option><option value="300">5m</option><option value="0">off</option>
+      </select>
+    </label>
+    <button id="refresh">Refresh now</button>
+    <button id="theme-toggle" class="icon-btn" aria-label="Switch to light mode" title="Switch to light mode"></button>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Door</h2>
+      <div id="state" class="state">—</div>
+      <div id="state-note"></div>
+      <dl>
+        <dt>Time</dt><dd id="sys-time">—</dd>
+        <dt>CPU temp</dt>
+        <dd class="temp-row">
+          <span id="temp-bar" class="temp-bar" role="meter" aria-valuemin="0" aria-valuemax="90" aria-label="CPU temperature"></span>
+          <span id="cpu-temp" class="temp-value">—</span>
+          <span id="temp-label" class="muted"></span>
+        </dd>
+        <dt>IP address</dt><dd id="pi-ip">—</dd>
+        <dt>Last update</dt><dd id="updated">—</dd>
+      </dl>
+      <h2 style="margin-top:22px">Today's schedule</h2>
+      <dl class="sun">
+        <dt>🌅 Sunrise</dt><dd><span id="sunrise">—</span> <span class="muted" id="open-at"></span></dd>
+        <dt>🌇 Sunset</dt><dd><span id="sunset">—</span> <span class="muted" id="close-at"></span></dd>
+        <dt>Next</dt><dd id="sun-next">—</dd>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>Controls <span id="control-badge" class="badge">—</span></h2>
+      <div class="row">
+        <button id="btn-open" class="primary">Open door</button>
+        <button id="btn-close" class="primary">Close door</button>
+        <button id="btn-restart" class="danger">Restart service</button>
+      </div>
+      <p class="muted">Controls go to <span id="control-target">—</span></p>
+      <h2 style="margin-top:16px">Activity</h2>
+      <pre id="log"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Current config</h2>
+      <textarea id="config-view"></textarea>
+    </section>
+
+    <section class="card">
+      <h2>Reconfigure</h2>
+      <textarea id="yaml"></textarea>
+      <ul id="problems"></ul>
+      <div class="row">
+        <button id="btn-send" class="primary" disabled>Send config</button>
+        <button id="btn-reset">Reset to current config</button>
+        <span id="dirty" class="muted"></span>
+      </div>
+      <p class="muted">Sending replaces config.yaml on the Pi and restarts the service.</p>
+    </section>
+  </div>
+</main>
+
+<dialog id="confirm">
+  <form method="dialog">
+    <h3 id="confirm-title"></h3>
+    <div id="confirm-body"></div>
+    <label class="ack" id="confirm-ack-row"><input type="checkbox" id="confirm-ack"> <span id="confirm-ack-text"></span></label>
+    <div class="row">
+      <button value="cancel" id="confirm-cancel" autofocus>Cancel</button>
+      <button value="ok" id="confirm-ok" class="primary"></button>
+    </div>
+  </form>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/yaml/yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/lint/lint.min.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let lastState = "unknown"; // door state from the last good /info
+let lastOk = 0;           // ms timestamp of the last good /info
+let controlTarget = "";
+let current = null;      // last config from /info
+let baseline = "";       // YAML the editor was last reset to
+let problems = [];
+
+// ---- YAML validation (mirrors king-coopa/configuration.py + api_server.py requirements) ----
+const REQUIRED = ["actuator_specs", "close_pin", "latitude", "longitude", "open_pin", "sunrise_offset", "sunset_offset"];
+const NUMBERS = ["latitude", "longitude", "sunrise_offset", "sunset_offset", "open_pin", "close_pin"];
+const API_REQUIRED = ["enabled", "host", "port"];
+
+function keyLine(text, key, indented) {
+  const re = new RegExp("^" + (indented ? "\\s+" : "") + key + "\\s*:", "m");
+  const m = re.exec(text);
+  return m ? text.slice(0, m.index).split("\n").length - 1 : 0;
+}
+
+function validate(text) {
+  const problems = [];
+  const add = (line, message, severity = "error") => problems.push({ line, message, severity });
+  let doc;
+  try {
+    doc = jsyaml.load(text);
+  } catch (e) {
+    add(e.mark ? e.mark.line : 0, "YAML syntax: " + e.reason, "error");
+    return { problems, doc: null };
+  }
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
+    add(0, "Config must be a mapping of key: value pairs");
+    return { problems, doc: null };
+  }
+  for (const k of REQUIRED) if (!(k in doc)) add(0, `Missing required key '${k}'`);
+  for (const k of NUMBERS) if (k in doc && typeof doc[k] !== "number") add(keyLine(text, k), `'${k}' should be a number`);
+  if ("latitude" in doc && Math.abs(doc.latitude) > 90) add(keyLine(text, "latitude"), "latitude must be between -90 and 90");
+  if ("longitude" in doc && Math.abs(doc.longitude) > 180) add(keyLine(text, "longitude"), "longitude must be between -180 and 180");
+  if (doc.open_pin !== undefined && doc.open_pin === doc.close_pin) add(keyLine(text, "close_pin"), "open_pin and close_pin are the same GPIO pin");
+
+  if ("actuator_specs" in doc && (typeof doc.actuator_specs !== "object" || doc.actuator_specs === null))
+    add(keyLine(text, "actuator_specs"), "'actuator_specs' must be a mapping");
+
+  const api = doc.api_server;
+  if (api === undefined) add(0, "Missing 'api_server' block — the service won't start without it");
+  else if (typeof api !== "object" || api === null) add(keyLine(text, "api_server"), "'api_server' must be a mapping");
+  else {
+    for (const k of API_REQUIRED) if (!(k in api)) add(keyLine(text, "api_server"), `api_server is missing '${k}'`);
+    if ("enabled" in api && typeof api.enabled !== "boolean") add(keyLine(text, "enabled", true), "api_server.enabled should be true/false");
+    if (api.enabled === false) add(keyLine(text, "enabled", true), "Disabling the API server will cut off this dashboard", "warning");
+    if ("port" in api && !Number.isInteger(api.port)) add(keyLine(text, "port", true), "api_server.port should be an integer");
+    if (current && current.api_server && api.port !== current.api_server.port)
+      add(keyLine(text, "port", true), `Port change (${current.api_server.port} → ${api.port}) — the dashboard will need its target updated`, "warning");
+  }
+  return { problems, doc };
+}
+
+CodeMirror.registerHelper("lint", "yaml", (text) =>
+  validate(text).problems.map((p) => ({
+    from: CodeMirror.Pos(p.line, 0), to: CodeMirror.Pos(p.line, 999),
+    message: p.message, severity: p.severity,
+  })));
+
+const editor = CodeMirror.fromTextArea($("yaml"), {
+  mode: "yaml", lineNumbers: true, gutters: ["CodeMirror-lint-markers"], lint: true,
+  tabSize: 2, indentWithTabs: false,
+  extraKeys: { Tab: (cm) => cm.replaceSelection("  ") },
+});
+
+function renderProblems() {
+  const result = validate(editor.getValue());
+  problems = result.problems;
+  const ul = $("problems");
+  ul.innerHTML = "";
+  for (const p of problems) {
+    const li = document.createElement("li");
+    li.className = p.severity;
+    li.textContent = `${p.severity === "error" ? "✕" : "!"} line ${p.line + 1}: ${p.message}`;
+    ul.appendChild(li);
+  }
+  if (!problems.length && editor.getValue().trim()) {
+    const li = document.createElement("li"); li.style.color = "var(--ok)"; li.textContent = "✓ Valid config";
+    ul.appendChild(li);
+  }
+  const dirty = editor.getValue() !== baseline;
+  $("dirty").textContent = dirty ? "edited" : "";
+  $("btn-send").disabled = !editor.getValue().trim() || problems.some((p) => p.severity === "error");
+}
+editor.on("change", renderProblems);
+
+function resetEditor() {
+  if (!current) return;
+  baseline = jsyaml.dump(current, { indent: 2, lineWidth: -1 });
+  editor.setValue(baseline);
+  renderProblems();
+}
+$("btn-reset").onclick = resetEditor;
+
+// ---- activity log ----
+function log(msg, cls = "") {
+  const line = document.createElement("div");
+  line.className = cls;
+  line.textContent = `${new Date().toLocaleTimeString()}  ${msg}`;
+  $("log").prepend(line);
+}
+
+// ---- CPU temp bar (Raspberry Pi Zero W / BCM2835) ----
+// The firmware starts soft-throttling at 80 °C and hard-limits at 85 °C, so red starts at 80.
+const TEMP_MAX = 90, TEMP_STEP = 5;   // 18 blocks, 5 °C each
+const TEMP_BANDS = [
+  { to: 60, color: "var(--g-ok)",   label: "Normal" },
+  { to: 70, color: "var(--g-warm)", label: "Warm" },
+  { to: 80, color: "var(--g-hot)",  label: "Hot" },
+  { to: Infinity, color: "var(--g-crit)", label: "Too hot" },
+];
+const bandFor = (t) => TEMP_BANDS.find((b) => t < b.to);
+const tempBlocks = [];
+for (let t = 0; t < TEMP_MAX; t += TEMP_STEP) {
+  const b = document.createElement("i");
+  b.style.background = bandFor(t).color;   // each block keeps its zone's color
+  $("temp-bar").appendChild(b);
+  tempBlocks.push(t);
+}
+function setTemp(c) {
+  const blocks = $("temp-bar").children;
+  if (typeof c !== "number" || Number.isNaN(c)) {
+    for (const b of blocks) b.classList.remove("on");
+    $("cpu-temp").textContent = "—"; $("cpu-temp").style.color = ""; $("temp-label").textContent = "";
+    return;
+  }
+  tempBlocks.forEach((t, i) => blocks[i].classList.toggle("on", c > t));
+  const band = bandFor(c);
+  $("temp-bar").setAttribute("aria-valuenow", c);
+  $("cpu-temp").textContent = `${c.toFixed(1)} °C / ${(c * 9 / 5 + 32).toFixed(1)} °F`;
+  $("cpu-temp").style.color = band.color;
+  $("temp-label").textContent = band.label;
+}
+setTemp(null);
+
+// ---- sunrise / sunset (same math as King Coopa) ----
+// Port of suntime 1.2.5 Sun._calc_sun_time (zenith 90.8), which king-coopa/sun_times_calc.py uses.
+// Returns minutes after UTC midnight, or null if the sun doesn't rise/set that day.
+function sunUtcMinutes(date, lat, lon, isRise) {
+  const TO_RAD = Math.PI / 180, zenith = 90.8;
+  const range = (v, max) => (v < 0 ? v + max : v >= max ? v - max : v);
+  const day = date.getDate(), month = date.getMonth() + 1, year = date.getFullYear();
+  const N1 = Math.floor(275 * month / 9), N2 = Math.floor((month + 9) / 12);
+  const N3 = 1 + Math.floor((year - 4 * Math.floor(year / 4) + 2) / 3);
+  const N = N1 - N2 * N3 + day - 30;
+  const lngHour = lon / 15;
+  const t = N + ((isRise ? 6 : 18) - lngHour) / 24;
+  const M = 0.9856 * t - 3.289;
+  const L = range(M + 1.916 * Math.sin(TO_RAD * M) + 0.020 * Math.sin(TO_RAD * 2 * M) + 282.634, 360);
+  let RA = range((1 / TO_RAD) * Math.atan(0.91764 * Math.tan(TO_RAD * L)), 360);
+  RA = (RA + Math.floor(L / 90) * 90 - Math.floor(RA / 90) * 90) / 15;
+  const sinDec = 0.39782 * Math.sin(TO_RAD * L), cosDec = Math.cos(Math.asin(sinDec));
+  const cosH = (Math.cos(TO_RAD * zenith) - sinDec * Math.sin(TO_RAD * lat)) / (cosDec * Math.cos(TO_RAD * lat));
+  if (cosH > 1 || cosH < -1) return null;
+  const H = (isRise ? 360 - (1 / TO_RAD) * Math.acos(cosH) : (1 / TO_RAD) * Math.acos(cosH)) / 15;
+  const UT = range(H + RA - 0.06571 * t - 6.622 - lngHour, 24);
+  return Math.round(UT * 60) % (24 * 60);   // suntime rounds to the minute
+}
+
+// Local Date for a sun event on the given local calendar day. King Coopa only compares
+// time-of-day, so pin the UTC time-of-day to the right local day.
+function sunEvent(day, lat, lon, isRise) {
+  const m = sunUtcMinutes(day, lat, lon, isRise);
+  if (m === null) return null;
+  const d = new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate(), 0, m));
+  const shift = Math.round((new Date(day.getFullYear(), day.getMonth(), day.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
+  d.setDate(d.getDate() + shift);
+  return d;
+}
+
+const fmtTime = (d) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const fmtOffset = (m) => `${m >= 0 ? "+" : "−"}${Math.abs(m)} min`;
+function fmtIn(ms) {
+  const mins = Math.round(ms / 60000), h = Math.floor(mins / 60), m = mins % 60;
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+function doorSchedule(cfg, day) {
+  const rise = sunEvent(day, cfg.latitude, cfg.longitude, true);
+  const set = sunEvent(day, cfg.latitude, cfg.longitude, false);
+  return {
+    rise, set,
+    open: rise && new Date(rise.getTime() + cfg.sunrise_offset * 60000),
+    close: set && new Date(set.getTime() + cfg.sunset_offset * 60000),
+  };
+}
+
+function renderSun() {
+  const cfg = current;
+  if (!cfg || typeof cfg.latitude !== "number" || typeof cfg.longitude !== "number") return;
+  const now = new Date();
+  const today = doorSchedule(cfg, now);
+  $("sunrise").textContent = today.rise ? fmtTime(today.rise) : "none today";
+  $("sunset").textContent = today.set ? fmtTime(today.set) : "none today";
+  $("open-at").textContent = today.open ? `· opens ${fmtTime(today.open)} (${fmtOffset(cfg.sunrise_offset)})` : "";
+  $("close-at").textContent = today.close ? `· closes ${fmtTime(today.close)} (${fmtOffset(cfg.sunset_offset)})` : "";
+
+  let next = "—";
+  if (today.open && now < today.open) next = `Opens in ${fmtIn(today.open - now)}`;
+  else if (today.close && now < today.close) next = `Closes in ${fmtIn(today.close - now)}`;
+  else {
+    const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+    const t = doorSchedule(cfg, tomorrow);
+    if (t.open) next = `Opens tomorrow at ${fmtTime(t.open)} (in ${fmtIn(t.open - now)})`;
+  }
+  $("sun-next").textContent = next;
+}
+// ---- door state vs schedule ----
+// Should be OPEN between today's open and close times, CLOSED otherwise. King Coopa fires within
+// a minute of the event and the actuator needs time to travel, so allow a grace period before alarming.
+const SCHEDULE_GRACE_MS = 3 * 60000;
+function expectedAt(t) {
+  const d = current && doorSchedule(current, t);
+  if (!d || !d.open || !d.close) return null;
+  return t >= d.open && t < d.close ? "OPEN" : "CLOSED";
+}
+function setDoorState(st) {
+  lastState = st;
+  $("state").textContent = st;
+  checkDoorState();
+}
+function checkDoorState() {
+  const el = $("state"), note = $("state-note"), st = lastState;
+  const now = new Date(), exp = expectedAt(now);
+  let status = "", msg = "";
+  if (!exp || st === "unknown") {
+    status = "";
+  } else if (st === exp) {
+    status = "ok"; msg = `On schedule — should be ${exp}`;
+  } else if (st === (exp === "OPEN" ? "OPENING" : "CLOSING")) {
+    status = "moving"; msg = `Moving to ${exp} as scheduled`;
+  } else if (st === expectedAt(new Date(now - SCHEDULE_GRACE_MS))) {
+    status = "moving"; msg = `Scheduled to be ${exp} — waiting for the door`;
+  } else {
+    status = "alarm"; msg = `Should be ${exp} right now`;
+  }
+  el.className = "state " + status;
+  note.className = status === "alarm" ? "alarm" : "";
+  note.textContent = msg;
+  document.title = status === "alarm" ? "⚠ King Coopa" : "King Coopa";
+}
+
+setInterval(() => { renderSun(); checkDoorState(); }, 30000);   // re-check as schedule times pass
+
+// ---- color mode toggle (dark by default, remembered per browser) ----
+const SUN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const MOON_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+function applyTheme(theme) {
+  const light = theme === "light";
+  if (light) document.documentElement.dataset.theme = "light";
+  else delete document.documentElement.dataset.theme;
+  const btn = $("theme-toggle"), label = light ? "Switch to dark mode" : "Switch to light mode";
+  btn.innerHTML = light ? MOON_ICON : SUN_ICON;
+  btn.setAttribute("aria-label", label); btn.title = label;
+  try { localStorage.setItem("kc-theme", light ? "light" : "dark"); } catch {}
+}
+$("theme-toggle").onclick = () => applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light");
+applyTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+
+// ---- info polling ----
+async function refresh() {
+  try {
+    const res = await fetch("/api/info", { cache: "no-store" });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.status);
+    const st = (data.door_opener && data.door_opener.state) || "unknown";
+    lastOk = Date.now();
+    setDoorState(st);
+    $("sys-time").textContent = data.system ? data.system.time : "—";
+    setTemp(data.system ? data.system.cpu_temp : null);
+    $("updated").textContent = new Date().toLocaleTimeString();
+    $("conn").textContent = "online"; $("conn").className = "badge ok";
+
+    const firstLoad = current === null;
+    current = data.config || {};
+    renderConfig(current);
+    renderSun();
+    checkDoorState();
+    // Keep the editor in sync until the user starts editing.
+    if (firstLoad || editor.getValue() === baseline) resetEditor();
+  } catch (e) {
+    $("conn").textContent = "offline"; $("conn").className = "badge err";
+    log(`info failed: ${e.message}`, "err");
+  }
+}
+
+// Read-only YAML view of the live config, highlighted the same way as the editor.
+const configView = CodeMirror.fromTextArea($("config-view"), {
+  mode: "yaml", lineNumbers: false, readOnly: "nocursor", tabSize: 2,
+});
+configView.getWrapperElement().classList.add("readonly");
+function renderConfig(cfg) {
+  const yaml = jsyaml.dump(cfg, { indent: 2, lineWidth: -1 });
+  if (configView.getValue() !== yaml) configView.setValue(yaml);
+}
+
+let timer = null;
+function schedule() {
+  clearInterval(timer);
+  const s = Number($("interval").value);
+  if (s > 0) timer = setInterval(refresh, s * 1000);
+}
+$("interval").onchange = schedule;
+$("refresh").onclick = refresh;
+
+// ---- controls ----
+async function call(method, path, body) {
+  const opts = { method };
+  if (body !== undefined) { opts.body = body; opts.headers = { "Content-Type": "text/yaml" }; }
+  log(`${method} ${path} …`);
+  try {
+    const res = await fetch("/api" + path, opts);
+    const text = await res.text();
+    let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    log(`${method} ${path} → ${JSON.stringify(data)}`, "ok");
+    if (data.state) setDoorState(data.state);
+    return true;
+  } catch (e) {
+    log(`${method} ${path} failed: ${e.message}`, "err");
+    return false;
+  }
+}
+
+function guarded(btn, fn) {
+  return async () => { btn.disabled = true; try { await fn(); } finally { btn.disabled = false; } };
+}
+
+// ---- safety checks: every control goes through a confirm dialog ----
+const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+
+// opts: { title, lines: [{text, cls}], extra: Node, ack: string|null, okLabel, danger }
+function confirmAction(opts) {
+  const dlg = $("confirm");
+  $("confirm-title").textContent = opts.title;
+  const body = $("confirm-body"); body.innerHTML = "";
+  const ul = el("ul");
+  for (const l of opts.lines) ul.appendChild(el("li", l.cls || "", l.text));
+  body.appendChild(ul);
+  if (opts.extra) body.appendChild(opts.extra);
+
+  const ok = $("confirm-ok"), ack = $("confirm-ack");
+  ok.textContent = opts.okLabel;
+  ok.className = opts.danger ? "danger" : "primary";
+  $("confirm-ack-row").hidden = !opts.ack;
+  $("confirm-ack-text").textContent = opts.ack || "";
+  ack.checked = false;
+  ok.disabled = !!opts.ack;
+  ack.onchange = () => { ok.disabled = !ack.checked; };
+
+  return new Promise((resolve) => {
+    dlg.onclose = () => resolve(dlg.returnValue === "ok");
+    dlg.returnValue = "cancel";
+    dlg.showModal();
+    $("confirm-cancel").focus();   // Enter/Escape never fires the action by accident
+  });
+}
+
+// Facts every confirmation shows: where it's going and how fresh our view of the door is.
+function contextLines() {
+  const lines = [{ text: `Target: ${controlTarget || "unknown"}` }];
+  if (controlTarget.includes(".invalid")) lines.push({ text: "Fake target — this won't reach the real door.", cls: "warn" });
+  if (!lastOk) lines.push({ text: "Door state is unknown (no successful info refresh yet).", cls: "warn" });
+  else {
+    const age = Math.round((Date.now() - lastOk) / 1000);
+    lines.push({ text: `Door was ${lastState} as of ${age}s ago.`, cls: age > 120 ? "warn" : "" });
+    if (age > 120) lines.push({ text: "That reading is stale — refresh first if you're unsure.", cls: "warn" });
+  }
+  return lines;
+}
+
+function doorCheck(action) {
+  const want = action === "open" ? "OPEN" : "CLOSED";
+  const moving = lastState === "OPENING" || lastState === "CLOSING";
+  const lines = contextLines();
+  if (lastState === want || lastState === (action === "open" ? "OPENING" : "CLOSING"))
+    lines.unshift({ text: `The door is already ${lastState}.`, cls: "warn" });
+  if (moving) lines.unshift({ text: `The door is currently ${lastState} — sending ${action} reverses it mid-travel.`, cls: "danger-text" });
+  return confirmAction({
+    title: action === "open" ? "Open the coop door?" : "Close the coop door?",
+    lines,
+    ack: action === "close" ? "I've checked the doorway is clear." : "Open the door now.",
+    okLabel: action === "open" ? "Open door" : "Close door",
+  });
+}
+
+$("btn-open").onclick = guarded($("btn-open"), async () => {
+  if (await doorCheck("open")) await call("PUT", "/open");
+});
+$("btn-close").onclick = guarded($("btn-close"), async () => {
+  if (await doorCheck("close")) await call("PUT", "/close");
+});
+$("btn-restart").onclick = guarded($("btn-restart"), async () => {
+  const lines = [
+    { text: 'Runs "systemctl restart king-coopa" on the Pi.' },
+    { text: "The API and door schedule are offline until it comes back (usually a few seconds)." },
+    ...contextLines(),
+  ];
+  if (lastState === "OPENING" || lastState === "CLOSING")
+    lines.unshift({ text: `The door is ${lastState} — restarting now can stop it partway.`, cls: "danger-text" });
+  if (await confirmAction({ title: "Restart King Coopa?", lines, ack: "Restart the service.", okLabel: "Restart", danger: true }))
+    await call("PUT", "/restart");
+});
+
+// Flatten {a: {b: 1}} -> {"a.b": 1} for a key-by-key diff.
+function flatten(obj, prefix = "", out = {}) {
+  for (const [k, v] of Object.entries(obj || {})) {
+    const key = prefix + k;
+    if (v && typeof v === "object" && !Array.isArray(v)) flatten(v, key + ".", out);
+    else out[key] = v;
+  }
+  return out;
+}
+function configDiff(before, after) {
+  const a = flatten(before), b = flatten(after), rows = [];
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const x = JSON.stringify(a[k]), y = JSON.stringify(b[k]);
+    if (x !== y) rows.push({ key: k, from: a[k], to: b[k] });
+  }
+  return rows;
+}
+
+$("btn-send").onclick = guarded($("btn-send"), async () => {
+  const text = editor.getValue();
+  const { problems: p, doc } = validate(text);   // re-check right before sending
+  if (p.some((x) => x.severity === "error")) { renderProblems(); return; }
+
+  const diff = configDiff(current, doc);
+  const list = el("ul", "diff");
+  if (!diff.length) list.appendChild(el("li", "warn", "No changes from the current config."));
+  for (const d of diff) {
+    const li = el("li"); li.append(d.key + ": ");
+    if (d.from !== undefined) li.append(el("del", "", JSON.stringify(d.from)));
+    if (d.from !== undefined && d.to !== undefined) li.append(" → ");
+    if (d.to !== undefined) li.append(el("ins", "", JSON.stringify(d.to)));
+    if (d.from === undefined) li.append(" (added)");
+    if (d.to === undefined) li.append(" (removed)");
+    list.appendChild(li);
+  }
+  const extra = el("div");
+  extra.append(el("strong", "", `Changes (${diff.length})`), list);
+
+  const lines = [
+    { text: "Replaces config.yaml on the Pi (old one kept as config.yaml.previous) and restarts the service." },
+    ...p.filter((x) => x.severity === "warning").map((x) => ({ text: x.message, cls: "warn" })),
+    ...contextLines(),
+  ];
+  const changedPins = diff.some((d) => /(_pin|actuator_specs)/.test(d.key));
+  if (changedPins) lines.unshift({ text: "Pin or actuator settings change how the door motor is driven.", cls: "danger-text" });
+
+  const ok = await confirmAction({
+    title: "Send new config?", lines, extra,
+    ack: diff.length ? "I've reviewed these changes." : "Send it anyway.",
+    okLabel: "Send & restart", danger: true,
+  });
+  if (ok && await call("POST", "/reconfigure", text)) { baseline = text; renderProblems(); }
+});
+
+// ---- targets ----
+fetch("/api/targets").then((r) => r.json()).then((t) => {
+  try { $("pi-ip").textContent = new URL(t.info).hostname; } catch { $("pi-ip").textContent = t.info; }
+  $("control-target").textContent = t.control;
+  controlTarget = t.control;
+  const fake = t.control.includes(".invalid");
+  $("control-badge").textContent = fake ? "fake target" : "live";
+  $("control-badge").className = "badge " + (fake ? "fake" : "err");
+}).catch(() => {});
+
+renderProblems();
+refresh();
+schedule();
+</script>
+</body>
+</html>
