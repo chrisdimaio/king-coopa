@@ -21,6 +21,7 @@ A small web dashboard for the [King Coopa](../README.md) chicken-coop door contr
   - plays in the page with a small built-in player, with well under a second of delay
   - shows a "camera offline" message and reconnects with backoff when the feed drops
   - stops pulling video while the tab is hidden, to spare the coop's Wi-Fi
+  - **pan/tilt** over ONVIF (for pan/tilt cameras like the C216): a direction pad on the video, keyboard arrows when the video is focused, a Fine/Big step size, and saved views ("Save current view…" stores a preset on the camera; "Go" moves to one). Every move is one fixed step, so a dropped connection can't leave the camera panning.
 - **`/status` endpoint** for Homepage and Uptime Kuma, plus a Docker `HEALTHCHECK`.
 - **Dark theme by default**, with a light/dark toggle that each browser remembers.
 
@@ -58,7 +59,8 @@ All settings are environment variables. For local runs they can also live in `da
 | `KC_TIMEOUT` | no | `10` | Upstream request timeout, in seconds. |
 | `KC_GO2RTC_URL` | camera only | — | The go2rtc relay, normally `http://127.0.0.1:1984`. Leave unset to hide the camera card. |
 | `KC_CAMERA_HOST` | camera only | — | Camera address. Used by go2rtc, not the dashboard. |
-| `TAPO_USER`, `TAPO_PASS` | camera only | — | The camera's Tapo **Camera Account** (Tapo app → camera → Advanced settings → Camera Account), **URL-encoded** (`@` → `%40`, `$` → `%24`). Used by go2rtc. |
+| `TAPO_USER`, `TAPO_PASS` | camera only | — | The camera's Tapo **Camera Account** (Tapo app → camera → Advanced settings → Camera Account), **URL-encoded** (`@` → `%40`, `$` → `%24`). Used by go2rtc for video, and by the dashboard for pan/tilt. |
+| `KC_CAMERA_ONVIF_PORT` | no | `2020` | Camera's ONVIF port, for pan/tilt. Pan/tilt is enabled when `KC_CAMERA_HOST`, `TAPO_USER` and `TAPO_PASS` are all set. |
 
 Both URLs must be `http://` or `https://`; the server refuses to start otherwise. The Controls card shows a **fake target** badge while `KC_CONTROL_URL` is a `.invalid` host.
 
@@ -175,6 +177,8 @@ The response looks like `{"status": "ok", "service": "king-coopa-dashboard", ...
 | GET | `/api/camera` | `{"enabled": bool, "qualities": ["sd", "hd"]}` |
 | GET | `/api/camera/snapshot?q=sd\|hd` | Current frame as JPEG |
 | GET (WebSocket) | `/api/camera/ws?q=sd\|hd` | Live feed: go2rtc's MSE protocol, relayed for that one stream |
+| GET | `/api/camera/ptz` | Pan/tilt position and saved views: `{"status": {"pan", "tilt", "moving"}, "presets": [{"token", "name"}]}` |
+| POST | `/api/camera/ptz` | JSON body, one of `{"action": "move", "dir": "left\|right\|up\|down", "step": "small\|large"}`, `{"action": "goto", "token": "..."}` or `{"action": "save", "name": "..."}`. Bad input returns 400; camera errors return 502. |
 
 If the upstream can't be reached, these return `502` with `{"error": "...", "target": "..."}`.
 
@@ -183,7 +187,8 @@ If the upstream can't be reached, these return `502` with `{"error": "...", "tar
 - **The dashboard has no login.** Anyone who can reach port 8090 can see the config. Once `KC_CONTROL_URL` is live, they can also open or close the door. Keep it on your LAN or behind an authenticating reverse proxy.
 - `/api/targets` shows the configured upstream URLs to anyone who can load the page.
 - **Never publish go2rtc's port.** Its API returns the camera's RTSP address, login included. In this setup it listens only on loopback inside the dashboard container, and `server.py` passes through just the live feed and snapshots for the two named streams.
-- Anyone who can reach the dashboard can watch the camera.
+- Anyone who can reach the dashboard can watch the camera and pan/tilt it. With pan/tilt configured, the dashboard container also holds the camera account (it talks ONVIF to the camera directly).
+- Pan/tilt only accepts fixed-size steps, preset tokens and names matching a strict pattern; moves are one at a time and rate-limited.
 - **The controller's own API is also unauthenticated**, so keep it on a trusted network. Older controller code parsed `/reconfigure` YAML with `yaml.load(..., Loader=FullLoader)` on PyYAML 5.3.1, which is affected by CVE-2020-14343 (a crafted request could run code on the Pi). The `dashboard` branch fixes this with `yaml.safe_load` and PyYAML 6.0.1. A Pi still running the older code needs updating to get the fix.
 - Don't commit real addresses or coordinates. `.env` and `.sensitive-patterns` are gitignored, and the pre-push check below enforces this.
 

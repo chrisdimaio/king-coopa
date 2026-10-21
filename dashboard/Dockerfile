@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 WORKDIR /app
-COPY server.py .
+COPY server.py ptz.py ./
 COPY static ./static
 # Where open/close/restart/reconfigure go. Defaults to a fake .invalid host so the
 # controls can't move the real door; override at build time (--build-arg) or at

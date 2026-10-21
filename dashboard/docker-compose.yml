@@ -15,6 +15,10 @@ services:
       KC_CONTROL_URL: ${KC_CONTROL_URL:-http://fake-king-coopa.invalid:8080}
       # Coop camera: set to http://127.0.0.1:1984 and start with --profile camera.
       KC_GO2RTC_URL: ${KC_GO2RTC_URL:-}
+      # Pan/tilt (ONVIF) uses the same camera account; leave unset to hide the controls.
+      KC_CAMERA_HOST: ${KC_CAMERA_HOST:-}
+      TAPO_USER: ${TAPO_USER:-}
+      TAPO_PASS: ${TAPO_PASS:-}
     restart: unless-stopped
 
   # Optional coop camera relay: docker compose --profile camera up -d --build

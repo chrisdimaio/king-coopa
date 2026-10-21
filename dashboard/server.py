@@ -6,6 +6,8 @@ controls point at different targets while the dashboard is being built.
 Optional coop camera: when KC_GO2RTC_URL is set, the live feed and snapshots are relayed from a
 go2rtc instance that is only reachable from here (its API exposes the camera login, so it must
 never be published). Only the two named streams and these two operations are passed through.
+Pan/tilt (optional): when KC_CAMERA_HOST, TAPO_USER and TAPO_PASS are set, the dashboard talks
+ONVIF to the camera directly (see ptz.py) for small fixed-step moves and presets.
 """
 import http.client
 import json
@@ -17,6 +19,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+from ptz import OnvifPTZ, PTZError, PTZInputError
 
 
 def _load_dotenv(path):
@@ -41,6 +45,15 @@ CONTROL_URL = os.environ.get("KC_CONTROL_URL", "http://fake-king-coopa.invalid:8
 # Camera relay (optional). go2rtc stream names for each quality the UI offers.
 GO2RTC_URL = os.environ.get("KC_GO2RTC_URL", "").rstrip("/")
 CAMERA_STREAMS = {"sd": "coop_sd", "hd": "coop_hd"}
+# Pan/tilt over ONVIF. Credentials are the camera account, URL-encoded as for go2rtc.
+_cam_host = os.environ.get("KC_CAMERA_HOST", "")
+_cam_user = urllib.parse.unquote(os.environ.get("TAPO_USER", ""))
+_cam_pass = urllib.parse.unquote(os.environ.get("TAPO_PASS", ""))
+PTZ = OnvifPTZ(_cam_host, _cam_user, _cam_pass, port=int(os.environ.get("KC_CAMERA_ONVIF_PORT", "2020"))) \
+    if _cam_host and _cam_user and _cam_pass else None
+# Fixed step sizes in ONVIF's generic -1..1 space; the UI only picks a direction and a size.
+PTZ_STEPS = {"small": 0.05, "large": 0.2}
+PTZ_DIRS = {"left": (-1, 0), "right": (1, 0), "up": (0, 1), "down": (0, -1)}
 for _name, _url in (("KC_INFO_URL", INFO_URL), ("KC_CONTROL_URL", CONTROL_URL), ("KC_GO2RTC_URL", GO2RTC_URL)):
     if _url and not _url.startswith(("http://", "https://")):
         raise SystemExit(f"{_name} must start with http:// or https:// (got {_url!r}).")
@@ -89,6 +102,8 @@ class Handler(SimpleHTTPRequestHandler):
         self._proxy("PUT")
 
     def do_POST(self):
+        if self.path == "/api/camera/ptz":
+            return self._ptz_post()
         self._proxy("POST")
 
     def _proxy(self, method):
@@ -120,8 +135,10 @@ class Handler(SimpleHTTPRequestHandler):
     # ---- camera relay ----
     def _camera(self, url):
         if url.path == "/api/camera":
-            info = {"enabled": bool(GO2RTC_URL), "qualities": list(CAMERA_STREAMS)}
+            info = {"enabled": bool(GO2RTC_URL), "qualities": list(CAMERA_STREAMS), "ptz": PTZ is not None}
             return self._send(200, json.dumps(info).encode())
+        if url.path == "/api/camera/ptz":
+            return self._ptz_get()
         if not GO2RTC_URL:
             return self._send(404, b'{"error": "camera not configured"}')
         quality = urllib.parse.parse_qs(url.query).get("q", ["sd"])[0]
@@ -133,6 +150,49 @@ class Handler(SimpleHTTPRequestHandler):
         if url.path == "/api/camera/ws" and self.headers.get("Upgrade", "").lower() == "websocket":
             return self._camera_ws(src)
         return self._send(404, b'{"error": "unknown route"}')
+
+    # ---- pan/tilt ----
+    def _ptz_get(self):
+        if PTZ is None:
+            return self._send(404, b'{"error": "pan/tilt not configured"}')
+        try:
+            body = {"status": PTZ.status(), "presets": PTZ.presets()}
+        except PTZError as e:
+            return self._send(502, json.dumps({"error": str(e)}).encode())
+        return self._send(200, json.dumps(body).encode())
+
+    def _ptz_post(self):
+        """{"action": "move", "dir": "left|right|up|down", "step": "small|large"}
+        {"action": "goto", "token": "<preset token>"} | {"action": "save", "name": "<preset name>"}"""
+        if PTZ is None:
+            return self._send(404, b'{"error": "pan/tilt not configured"}')
+        length = int(self.headers.get("Content-Length") or 0)
+        if not 0 < length <= 1024:
+            return self._send(400, b'{"error": "bad request"}')
+        try:
+            req = json.loads(self.rfile.read(length))
+            action = req.get("action")
+        except (ValueError, AttributeError):
+            return self._send(400, b'{"error": "bad request"}')
+        try:
+            if action == "move":
+                direction, step = PTZ_DIRS.get(req.get("dir")), PTZ_STEPS.get(req.get("step", "small"))
+                if direction is None or step is None:
+                    return self._send(400, b'{"error": "unknown direction or step"}')
+                PTZ.nudge(direction[0] * step, direction[1] * step)
+                result = {"ok": True}
+            elif action == "goto":
+                PTZ.goto_preset(str(req.get("token", "")))
+                result = {"ok": True}
+            elif action == "save":
+                result = {"ok": True, "token": PTZ.save_preset(str(req.get("name", "")).strip())}
+            else:
+                return self._send(400, b'{"error": "unknown action"}')
+        except PTZInputError as e:
+            return self._send(400, json.dumps({"error": str(e)}).encode())
+        except PTZError as e:
+            return self._send(502, json.dumps({"error": str(e)}).encode())
+        return self._send(200, json.dumps(result).encode())
 
     def _camera_snapshot(self, src):
         req = urllib.request.Request(f"{GO2RTC_URL}/api/frame.jpeg?src={src}")

@@ -162,6 +162,21 @@
   .seg button + button { border-left: 1px solid var(--line-strong); }
   .seg button.active { background: var(--accent-soft); color: var(--accent); }
 
+  /* ---- pan/tilt ---- */
+  .ptz-pad { position: absolute; right: 12px; bottom: 12px; display: grid; gap: 4px;
+             grid-template-columns: repeat(3, 38px); grid-template-rows: repeat(3, 38px);
+             grid-template-areas: ". up ." "left mid right" ". down ."; }
+  .ptz-pad[hidden] { display: none; }
+  .ptz-pad button { padding: 0; font-size: 14px; line-height: 1; color: #e6e9ef; border-radius: 10px;
+                    background: rgb(10 14 19 / .62); border: 1px solid rgb(255 255 255 / .16); backdrop-filter: blur(4px); }
+  .ptz-pad button:hover:not(:disabled) { background: rgb(10 14 19 / .8); border-color: rgb(255 255 255 / .35); }
+  .ptz-pad .up { grid-area: up; } .ptz-pad .left { grid-area: left; } .ptz-pad .right { grid-area: right; }
+  .ptz-pad .down { grid-area: down; } .ptz-pad .mid { grid-area: mid; font-size: 11px; font-weight: 600; }
+  .ptz-bar { margin-top: 12px; }
+  .ptz-bar[hidden] { display: none; }
+  #ptz-msg.err { color: var(--err); }
+  .cam-frame:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
   /* ---- CPU temp bar ---- */
   .temp-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .temp-bar { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--line-strong); border-radius: 6px;
@@ -247,9 +262,23 @@
           <button type="button" id="cam-snapshot" title="Open a full-resolution snapshot">Snapshot</button>
         </div>
       </div>
-      <div class="cam-frame">
+      <div class="cam-frame" id="cam-frame" tabindex="0" aria-label="Coop camera. Arrow keys pan and tilt when pan/tilt is available.">
         <video id="cam-video" muted playsinline autoplay></video>
         <div id="cam-overlay" class="cam-overlay">Connecting…</div>
+        <div class="ptz-pad" id="ptz-pad" hidden>
+          <button type="button" class="up" data-dir="up" aria-label="Tilt up">▲</button>
+          <button type="button" class="left" data-dir="left" aria-label="Pan left">◀</button>
+          <button type="button" class="mid" id="ptz-step" title="Step size: click to switch">Fine</button>
+          <button type="button" class="right" data-dir="right" aria-label="Pan right">▶</button>
+          <button type="button" class="down" data-dir="down" aria-label="Tilt down">▼</button>
+        </div>
+      </div>
+      <div class="row ptz-bar" id="ptz-bar" hidden>
+        <label class="muted" for="ptz-presets">Saved views</label>
+        <select id="ptz-presets"><option value="">None saved yet</option></select>
+        <button type="button" id="ptz-goto" disabled>Go</button>
+        <button type="button" id="ptz-save">Save current view…</button>
+        <span id="ptz-msg" class="muted"></span>
       </div>
     </section>
 
@@ -653,11 +682,81 @@ for (const b of document.querySelectorAll(".seg button")) {
     cam.retry = 0; camStart();
   };
 }
+// ---- pan/tilt (ONVIF via the dashboard; fixed small/large steps, one request at a time) ----
+const ptz = { step: "small", inFlight: null };
+function ptzMsg(text, cls = "") { $("ptz-msg").textContent = text; $("ptz-msg").className = "muted " + cls; }
+async function ptzPost(body) {
+  const r = await fetch("/api/camera/ptz", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+  return d;
+}
+function ptzMove(dir) {
+  if (ptz.inFlight) return;        // drop clicks while a move is in flight
+  ptz.inFlight = ptzPost({ action: "move", dir, step: ptz.step })
+    .then(() => ptzMsg(""))
+    .catch((e) => ptzMsg(`Move failed: ${e.message}`, "err"))
+    .finally(() => { ptz.inFlight = null; });
+}
+async function ptzLoad(select) {
+  const r = await fetch("/api/camera/ptz");
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+  const sel = $("ptz-presets");
+  sel.innerHTML = "";
+  if (!d.presets.length) sel.appendChild(new Option("None saved yet", ""));
+  for (const p of d.presets) sel.appendChild(new Option(p.name, p.token));
+  if (select) sel.value = select;
+  $("ptz-goto").disabled = !sel.value;
+}
+for (const b of document.querySelectorAll(".ptz-pad [data-dir]")) b.onclick = () => ptzMove(b.dataset.dir);
+$("ptz-step").onclick = () => {
+  ptz.step = ptz.step === "small" ? "large" : "small";
+  $("ptz-step").textContent = ptz.step === "small" ? "Fine" : "Big";
+};
+$("cam-frame").addEventListener("keydown", (e) => {
+  const dir = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" }[e.key];
+  if (!dir || $("ptz-pad").hidden) return;
+  e.preventDefault();
+  ptzMove(dir);
+});
+$("ptz-presets").onchange = () => { $("ptz-goto").disabled = !$("ptz-presets").value; };
+$("ptz-goto").onclick = guarded($("ptz-goto"), async () => {
+  const sel = $("ptz-presets"), name = sel.options[sel.selectedIndex].text;
+  try { await ptzPost({ action: "goto", token: sel.value }); ptzMsg(`Moving to “${name}”`); log(`camera → saved view “${name}”`, "ok"); }
+  catch (e) { ptzMsg(`Couldn't move: ${e.message}`, "err"); }
+});
+$("ptz-save").onclick = guarded($("ptz-save"), async () => {
+  const name = (prompt("Name for this camera view (letters, numbers, spaces, - or _):", "Home") || "").trim();
+  if (!name) return;
+  if (!/^[A-Za-z0-9 _-]{1,32}$/.test(name)) { ptzMsg("Names are 1–32 letters, numbers, spaces, - or _.", "err"); return; }
+  const taken = [...$("ptz-presets").options].some((o) => o.value && o.text === name);
+  const ok = await confirmAction({
+    title: `Save this view as “${name}”?`,
+    lines: [
+      { text: "Stores the camera's current pan/tilt position on the camera itself." },
+      ...(taken ? [{ text: `A view named “${name}” already exists; the camera may keep both.`, cls: "warn" }] : []),
+    ],
+    ack: null, okLabel: "Save view",
+  });
+  if (!ok) return;
+  try {
+    const d = await ptzPost({ action: "save", name });
+    await ptzLoad(d.token);
+    ptzMsg(`Saved “${name}”`); log(`camera view saved as “${name}”`, "ok");
+  } catch (e) { ptzMsg(`Couldn't save: ${e.message}`, "err"); }
+});
+
 $("cam-snapshot").onclick = () => window.open(`/api/camera/snapshot?q=hd&t=${Date.now()}`, "_blank", "noopener");
 fetch("/api/camera").then((r) => r.json()).then((c) => {
   if (!c.enabled) return;
   $("camera-card").hidden = false;
   camStart();
+  if (c.ptz) {
+    $("ptz-pad").hidden = false;
+    $("ptz-bar").hidden = false;
+    ptzLoad().catch((e) => ptzMsg(`Pan/tilt unavailable: ${e.message}`, "err"));
+  }
 }).catch(() => { /* camera not configured on this server */ });
 
 // ---- info polling ----
