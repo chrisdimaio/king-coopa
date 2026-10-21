@@ -79,6 +79,13 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=STATIC_DIR, **kwargs)
 
+    def end_headers(self):
+        # Static files: make browsers revalidate every time (a cheap 304 via Last-Modified) so a
+        # redeploy shows up on the next load. API responses set their own no-store in _send.
+        if not self.path.startswith("/api/") and self.path != "/status":
+            self.send_header("Cache-Control", "no-cache")
+        super().end_headers()
+
     def do_GET(self):
         url = urllib.parse.urlsplit(self.path)
         if url.path.startswith("/api/camera"):
