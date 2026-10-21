@@ -1,5 +1,4 @@
 import yaml
-from yaml.loader import FullLoader
 
 
 class Configuration():
@@ -8,7 +7,7 @@ class Configuration():
 
     def __init__(self, config_file="config.yaml"):
         with open(config_file, "r") as yml:
-            cfg = yaml.load(yml, Loader=FullLoader)
+            cfg = yaml.safe_load(yml)
             for c in self.REQUIRED_CONFIGS:
                 if c not in cfg:
                     raise Exception("Missing required config '{}'".format(c))

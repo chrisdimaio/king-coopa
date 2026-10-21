@@ -184,7 +184,7 @@ If the upstream can't be reached, these return `502` with `{"error": "...", "tar
 - `/api/targets` shows the configured upstream URLs to anyone who can load the page.
 - **Never publish go2rtc's port.** Its API returns the camera's RTSP address, login included. In this setup it listens only on loopback inside the dashboard container, and `server.py` passes through just the live feed and snapshots for the two named streams.
 - Anyone who can reach the dashboard can watch the camera.
-- **The controller's own API is also unauthenticated.** Its `/reconfigure` parses YAML with `yaml.load(..., Loader=FullLoader)` on PyYAML 5.3.1, which is affected by CVE-2020-14343. Switching to `yaml.safe_load` and upgrading PyYAML on the Pi is recommended before exposing it beyond a trusted network.
+- **The controller's own API is also unauthenticated**, so keep it on a trusted network. Older controller code parsed `/reconfigure` YAML with `yaml.load(..., Loader=FullLoader)` on PyYAML 5.3.1, which is affected by CVE-2020-14343 (a crafted request could run code on the Pi). The `dashboard` branch fixes this with `yaml.safe_load` and PyYAML 6.0.1. A Pi still running the older code needs updating to get the fix.
 - Don't commit real addresses or coordinates. `.env` and `.sensitive-patterns` are gitignored, and the pre-push check below enforces this.
 
 ## Development

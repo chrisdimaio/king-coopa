@@ -10,7 +10,7 @@ MarkupSafe==1.1.1
 pigpio==1.78
 pycodestyle==2.6.0
 python-dateutil==2.8.1
-PyYAML==5.3.1
+PyYAML==6.0.1
 RPi.GPIO==0.7.0
 six==1.15.0
 suntime==1.2.5

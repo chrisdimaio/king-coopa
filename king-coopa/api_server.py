@@ -76,15 +76,33 @@ def restart():
 @app.route('/reconfigure', methods=["post"])
 def reconfigure():
     import builtins
-    import subprocess
+    import os
+    import shutil
     import yaml
-    from yaml.loader import FullLoader
+    from configuration import Configuration
+
+    # Parse and check the new config before touching the current one, so a bad
+    # request can't leave the Pi without a usable config.yaml.
     try:
-        # Backup the current config
-        subprocess.Popen(["mv", "config.yaml", "config.yaml.previous"])
-        with builtins.open("config.yaml", "w") as f:
-            yaml.dump(yaml.load(request.data, Loader=FullLoader), f)
-        restart()
+        cfg = yaml.safe_load(request.data)
     except yaml.YAMLError as exc:
-        print(exc)
+        return jsonify({"Success": False, "error": "Invalid YAML: {}".format(exc)}), 400
+    if not isinstance(cfg, dict):
+        return jsonify({"Success": False, "error": "Config must be a YAML mapping"}), 400
+    missing = [c for c in Configuration.REQUIRED_CONFIGS if c not in cfg]
+    api = cfg.get("api_server")
+    if not isinstance(api, dict):
+        missing.append("api_server")
+    else:
+        missing += ["api_server." + c for c in _REQUIRED_CONFIGS if c not in api]
+    if missing:
+        return jsonify({"Success": False, "error": "Missing required config: " + ", ".join(missing)}), 400
+
+    # Keep the current config as config.yaml.previous, then swap the new one in atomically.
+    if os.path.exists("config.yaml"):
+        shutil.copy2("config.yaml", "config.yaml.previous")
+    with builtins.open("config.yaml.new", "w") as f:
+        yaml.safe_dump(cfg, f)
+    os.replace("config.yaml.new", "config.yaml")
+    restart()
     return jsonify({"Success": True})
