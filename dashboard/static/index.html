@@ -97,6 +97,7 @@
   button.danger { color: var(--err); border-color: color-mix(in srgb, var(--err) 40%, transparent);
                   background: color-mix(in srgb, var(--err) 8%, transparent); }
   button.danger:hover:not(:disabled) { border-color: var(--err); }
+  .badge[hidden] { display: none; }
   .badge { font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: none; padding: 3px 10px;
            border-radius: 99px; border: 1px solid var(--line-strong); color: var(--muted); background: var(--card-2);
            display: inline-flex; align-items: center; gap: 6px; }
@@ -240,7 +241,7 @@
     </section>
 
     <section class="card">
-      <h2>Controls <span id="control-badge" class="badge">—</span></h2>
+      <h2>Controls <span id="control-badge" class="badge" hidden>—</span></h2>
       <div class="row">
         <button id="btn-open" class="primary">Open door</button>
         <button id="btn-close" class="primary">Close door</button>
@@ -964,15 +965,16 @@ fetch("/api/targets").then((r) => r.json()).then((t) => {
   try { $("pi-ip").textContent = new URL(t.info).hostname; } catch { $("pi-ip").textContent = t.info; }
   controlTarget = t.control;
   reconfigTarget = t.reconfigure || t.control;
-  const badge = (id, url) => {
+  const badge = (id, url, showLive) => {
     const fake = url.includes(".invalid");
+    $(id).hidden = !fake && !showLive;
     $(id).textContent = fake ? "fake target" : "live";
     $(id).className = "badge " + (fake ? "fake" : "err");
   };
   $("control-target").textContent = controlTarget;
   $("reconfig-target").textContent = reconfigTarget;
-  badge("control-badge", controlTarget);
-  badge("reconfig-badge", reconfigTarget);
+  badge("control-badge", controlTarget, false);   // controls normally talk to the real door; only flag a fake target
+  badge("reconfig-badge", reconfigTarget, true);
 }).catch(() => {});
 
 renderProblems();
