@@ -2,12 +2,12 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY server.py ptz.py ./
 COPY static ./static
-# Where open/close/restart/reconfigure go. Defaults to a fake .invalid host so the
-# controls can't move the real door; override at build time (--build-arg) or at
-# run time (-e KC_CONTROL_URL=...).
-ARG KC_CONTROL_URL=http://fake-king-coopa.invalid:8080
+# Where reconfigure goes. Defaults to a fake .invalid host so the dashboard can't rewrite the
+# Pi's config; override at build time (--build-arg) or at run time (-e KC_RECONFIGURE_URL=...).
+# Open/close/restart go to KC_CONTROL_URL, which defaults to KC_INFO_URL (the real controller).
+ARG KC_RECONFIGURE_URL=http://fake-king-coopa.invalid:8080
 ENV PORT=8090 \
-    KC_CONTROL_URL=${KC_CONTROL_URL} \
+    KC_RECONFIGURE_URL=${KC_RECONFIGURE_URL} \
     PYTHONUNBUFFERED=1
 EXPOSE 8090
 USER nobody

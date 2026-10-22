@@ -288,7 +288,7 @@
     </section>
 
     <section class="card">
-      <h2>Reconfigure</h2>
+      <h2>Reconfigure <span id="reconfig-badge" class="badge">—</span></h2>
       <textarea id="yaml"></textarea>
       <ul id="problems"></ul>
       <div class="row">
@@ -296,7 +296,7 @@
         <button id="btn-reset">Reset to current config</button>
         <span id="dirty" class="muted"></span>
       </div>
-      <p class="muted">Sending replaces config.yaml on the Pi and restarts the service.</p>
+      <p class="muted">Sending replaces config.yaml on the Pi and restarts the service. Goes to <span id="reconfig-target">—</span></p>
     </section>
   </div>
 </main>
@@ -322,6 +322,7 @@ const $ = (id) => document.getElementById(id);
 let lastState = "unknown"; // door state from the last good /info
 let lastOk = 0;           // ms timestamp of the last good /info
 let controlTarget = "";
+let reconfigTarget = "";
 let current = null;      // last config from /info
 let baseline = "";       // YAML the editor was last reset to
 let problems = [];
@@ -859,9 +860,9 @@ function confirmAction(opts) {
 }
 
 // Facts every confirmation shows: where it's going and how fresh our view of the door is.
-function contextLines() {
-  const lines = [{ text: `Target: ${controlTarget || "unknown"}` }];
-  if (controlTarget.includes(".invalid")) lines.push({ text: "Fake target — this won't reach the real door.", cls: "warn" });
+function contextLines(target = controlTarget) {
+  const lines = [{ text: `Target: ${target || "unknown"}` }];
+  if (target.includes(".invalid")) lines.push({ text: "Fake target — this won't reach the real door.", cls: "warn" });
   if (!lastOk) lines.push({ text: "Door state is unknown (no successful info refresh yet).", cls: "warn" });
   else {
     const age = Math.round((Date.now() - lastOk) / 1000);
@@ -945,7 +946,7 @@ $("btn-send").onclick = guarded($("btn-send"), async () => {
   const lines = [
     { text: "Replaces config.yaml on the Pi (old one kept as config.yaml.previous) and restarts the service." },
     ...p.filter((x) => x.severity === "warning").map((x) => ({ text: x.message, cls: "warn" })),
-    ...contextLines(),
+    ...contextLines(reconfigTarget),
   ];
   const changedPins = diff.some((d) => /(_pin|actuator_specs)/.test(d.key));
   if (changedPins) lines.unshift({ text: "Pin or actuator settings change how the door motor is driven.", cls: "danger-text" });
@@ -961,11 +962,17 @@ $("btn-send").onclick = guarded($("btn-send"), async () => {
 // ---- targets ----
 fetch("/api/targets").then((r) => r.json()).then((t) => {
   try { $("pi-ip").textContent = new URL(t.info).hostname; } catch { $("pi-ip").textContent = t.info; }
-  $("control-target").textContent = t.control;
   controlTarget = t.control;
-  const fake = t.control.includes(".invalid");
-  $("control-badge").textContent = fake ? "fake target" : "live";
-  $("control-badge").className = "badge " + (fake ? "fake" : "err");
+  reconfigTarget = t.reconfigure || t.control;
+  const badge = (id, url) => {
+    const fake = url.includes(".invalid");
+    $(id).textContent = fake ? "fake target" : "live";
+    $(id).className = "badge " + (fake ? "fake" : "err");
+  };
+  $("control-target").textContent = controlTarget;
+  $("reconfig-target").textContent = reconfigTarget;
+  badge("control-badge", controlTarget);
+  badge("reconfig-badge", reconfigTarget);
 }).catch(() => {});
 
 renderProblems();

@@ -40,7 +40,10 @@ _load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 INFO_URL = os.environ.get("KC_INFO_URL", "").rstrip("/")
 if not INFO_URL:
     raise SystemExit("KC_INFO_URL is not set (e.g. http://<pi-address>:8080). See dashboard/.env.example.")
-CONTROL_URL = os.environ.get("KC_CONTROL_URL", "http://fake-king-coopa.invalid:8080").rstrip("/")
+# Open/close/restart go to the controller (default: the same address as info). Reconfigure has its
+# own target, defaulting to a fake .invalid host so it can't rewrite the Pi's config until set.
+CONTROL_URL = (os.environ.get("KC_CONTROL_URL") or INFO_URL).rstrip("/")
+RECONFIGURE_URL = os.environ.get("KC_RECONFIGURE_URL", "http://fake-king-coopa.invalid:8080").rstrip("/")
 # Only plain HTTP(S) upstreams; urlopen would otherwise also accept file:// and friends.
 # Camera relay (optional). go2rtc stream names for each quality the UI offers.
 GO2RTC_URL = os.environ.get("KC_GO2RTC_URL", "").rstrip("/")
@@ -54,7 +57,8 @@ PTZ = OnvifPTZ(_cam_host, _cam_user, _cam_pass, port=int(os.environ.get("KC_CAME
 # Fixed step sizes in ONVIF's generic -1..1 space; the UI only picks a direction and a size.
 PTZ_STEPS = {"small": 0.05, "large": 0.2}
 PTZ_DIRS = {"left": (-1, 0), "right": (1, 0), "up": (0, 1), "down": (0, -1)}
-for _name, _url in (("KC_INFO_URL", INFO_URL), ("KC_CONTROL_URL", CONTROL_URL), ("KC_GO2RTC_URL", GO2RTC_URL)):
+for _name, _url in (("KC_INFO_URL", INFO_URL), ("KC_CONTROL_URL", CONTROL_URL),
+                    ("KC_RECONFIGURE_URL", RECONFIGURE_URL), ("KC_GO2RTC_URL", GO2RTC_URL)):
     if _url and not _url.startswith(("http://", "https://")):
         raise SystemExit(f"{_name} must start with http:// or https:// (got {_url!r}).")
 # All interfaces by default: inside a container the published port arrives on eth0, not loopback.
@@ -70,7 +74,7 @@ ROUTES = {
     ("PUT", "/api/open"): (CONTROL_URL, "/open"),
     ("PUT", "/api/close"): (CONTROL_URL, "/close"),
     ("PUT", "/api/restart"): (CONTROL_URL, "/restart"),
-    ("POST", "/api/reconfigure"): (CONTROL_URL, "/reconfigure"),
+    ("POST", "/api/reconfigure"): (RECONFIGURE_URL, "/reconfigure"),
 }
 MAX_BODY = 64 * 1024
 
@@ -100,7 +104,8 @@ class Handler(SimpleHTTPRequestHandler):
                 "started": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(STARTED)),
             }).encode())
         if self.path == "/api/targets":
-            return self._send(200, json.dumps({"info": INFO_URL, "control": CONTROL_URL}).encode())
+            targets = {"info": INFO_URL, "control": CONTROL_URL, "reconfigure": RECONFIGURE_URL}
+            return self._send(200, json.dumps(targets).encode())
         if self.path.startswith("/api/"):
             return self._proxy("GET")
         return super().do_GET()
@@ -255,5 +260,6 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     camera = f"  camera -> {GO2RTC_URL}" if GO2RTC_URL else ""
-    print(f"King Coopa dashboard on :{PORT}  info -> {INFO_URL}  controls -> {CONTROL_URL}{camera}", flush=True)
+    print(f"King Coopa dashboard on :{PORT}  info -> {INFO_URL}  controls -> {CONTROL_URL}"
+          f"  reconfigure -> {RECONFIGURE_URL}{camera}", flush=True)
     ThreadingHTTPServer((BIND, PORT), Handler).serve_forever()

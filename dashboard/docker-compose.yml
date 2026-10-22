@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        KC_CONTROL_URL: ${KC_CONTROL_URL:-http://fake-king-coopa.invalid:8080}
+        KC_RECONFIGURE_URL: ${KC_RECONFIGURE_URL:-http://fake-king-coopa.invalid:8080}
     image: king-coopa-dashboard
     container_name: king-coopa-dashboard
     ports:
@@ -11,8 +11,10 @@ services:
     environment:
       # Set in a .env next to this file, or in Portainer's stack environment variables.
       KC_INFO_URL: ${KC_INFO_URL:?set KC_INFO_URL to the King Coopa API, e.g. http://<pi-address>:8080}
-      # Controls (open/close/restart/reconfigure). Fake host unless KC_CONTROL_URL is set.
-      KC_CONTROL_URL: ${KC_CONTROL_URL:-http://fake-king-coopa.invalid:8080}
+      # Open/close/restart. Empty = same as KC_INFO_URL (the real controller).
+      KC_CONTROL_URL: ${KC_CONTROL_URL:-}
+      # Reconfigure stays on a fake host unless KC_RECONFIGURE_URL is set.
+      KC_RECONFIGURE_URL: ${KC_RECONFIGURE_URL:-http://fake-king-coopa.invalid:8080}
       # Coop camera: set to http://127.0.0.1:1984 and start with --profile camera.
       KC_GO2RTC_URL: ${KC_GO2RTC_URL:-}
       # Pan/tilt (ONVIF) uses the same camera account; leave unset to hide the controls.

@@ -31,8 +31,8 @@ A small web dashboard for the [King Coopa](../README.md) chicken-coop door contr
 browser ──► dashboard (server.py, :8090) ──► King Coopa API on the Pi (:8080)
              ├─ serves static/index.html
              ├─ GET  /api/info          → KC_INFO_URL/info
-             └─ PUT  /api/open|close|restart
-                POST /api/reconfigure   → KC_CONTROL_URL/...
+             ├─ PUT  /api/open|close|restart → KC_CONTROL_URL/... (defaults to KC_INFO_URL)
+             └─ POST /api/reconfigure   → KC_RECONFIGURE_URL/reconfigure (fake host by default)
 ```
 
 With the camera enabled, a go2rtc container shares the dashboard container's network and listens only on `127.0.0.1:1984` there:
@@ -42,7 +42,7 @@ browser ──WebSocket /api/camera/ws?q=sd|hd──► server.py ──► go2r
         ──GET /api/camera/snapshot?q=…─────►
 ```
 
-`server.py` is a dependency-free Python proxy. It exists because the controller's Flask API sends no CORS headers, so a browser can't call it directly. It also lets **info** and **controls** point at different hosts. Until you're ready, keep controls pointed at a fake `.invalid` host so the buttons can't move the real door.
+`server.py` is a dependency-free Python proxy. It exists because the controller's Flask API sends no CORS headers, so a browser can't call it directly. It also lets **info**, **controls** and **reconfigure** point at different hosts. Open, close and restart go to the real controller by default. Reconfigure defaults to a fake `.invalid` host, so the dashboard can't rewrite the Pi's config until you point it there.
 
 The page loads CodeMirror, js-yaml and Google Fonts from public CDNs, so the browser viewing it needs internet access.
 
@@ -53,7 +53,8 @@ All settings are environment variables. For local runs they can also live in `da
 | Variable | Required | Default | Purpose |
 |---|---|---|---|
 | `KC_INFO_URL` | **yes** | — | King Coopa API used for live info, e.g. `http://<pi-address>:8080`. The server won't start without it. |
-| `KC_CONTROL_URL` | no | `http://fake-king-coopa.invalid:8080` | Where open, close, restart and reconfigure go. Set it to the same value as `KC_INFO_URL` to make the controls live. In Docker it's also a build arg (`--build-arg KC_CONTROL_URL=...`) that sets the image's default; a runtime `-e` or stack variable overrides it. |
+| `KC_CONTROL_URL` | no | same as `KC_INFO_URL` | Where open, close and restart go. Set it to a `.invalid` host (e.g. `http://fake-king-coopa.invalid:8080`) to make those buttons harmless. |
+| `KC_RECONFIGURE_URL` | no | `http://fake-king-coopa.invalid:8080` | Where reconfigure goes. Set it to the Pi's address to let the dashboard rewrite `config.yaml` there. In Docker it's also a build arg (`--build-arg KC_RECONFIGURE_URL=...`) that sets the image's default; a runtime `-e` or stack variable overrides it. |
 | `PORT` | no | `8090` | Port the dashboard listens on. |
 | `BIND` | no | `0.0.0.0` | Interface to listen on. Use `127.0.0.1` for local-only. |
 | `KC_TIMEOUT` | no | `10` | Upstream request timeout, in seconds. |
@@ -62,7 +63,7 @@ All settings are environment variables. For local runs they can also live in `da
 | `TAPO_USER`, `TAPO_PASS` | camera only | — | The camera's Tapo **Camera Account** (Tapo app → camera → Advanced settings → Camera Account), **URL-encoded** (`@` → `%40`, `$` → `%24`). Used by go2rtc for video, and by the dashboard for pan/tilt. |
 | `KC_CAMERA_ONVIF_PORT` | no | `2020` | Camera's ONVIF port, for pan/tilt. Pan/tilt is enabled when `KC_CAMERA_HOST`, `TAPO_USER` and `TAPO_PASS` are all set. |
 
-Both URLs must be `http://` or `https://`; the server refuses to start otherwise. The Controls card shows a **fake target** badge while `KC_CONTROL_URL` is a `.invalid` host.
+All URLs must be `http://` or `https://`; the server refuses to start otherwise. The Controls and Reconfigure cards each show **live** or **fake target** (a `.invalid` host).
 
 ## Setup
 
@@ -72,7 +73,7 @@ Both URLs must be `http://` or `https://`; the server refuses to start otherwise
 2. Repository URL: `https://github.com/chrisdimaio/king-coopa`.
 3. Repository reference: `refs/heads/dashboard`.
 4. Compose path: `dashboard/docker-compose.yml`.
-5. Under **Environment variables**, add `KC_INFO_URL` = `http://<pi-address>:8080`. To go live later, also add `KC_CONTROL_URL`.
+5. Under **Environment variables**, add `KC_INFO_URL` = `http://<pi-address>:8080`. Open, close and restart go there too. To let the dashboard reconfigure the Pi later, also add `KC_RECONFIGURE_URL`.
 6. Deploy, then open `http://<docker-host>:8090`.
 
 The compose file builds the image from `dashboard/Dockerfile` and refuses to start if `KC_INFO_URL` is missing.
@@ -184,7 +185,7 @@ If the upstream can't be reached, these return `502` with `{"error": "...", "tar
 
 ## Security notes
 
-- **The dashboard has no login.** Anyone who can reach port 8090 can see the config. Once `KC_CONTROL_URL` is live, they can also open or close the door. Keep it on your LAN or behind an authenticating reverse proxy.
+- **The dashboard has no login.** Anyone who can reach port 8090 can see the config and open, close or restart the door (each with a confirmation, but no password). Once `KC_RECONFIGURE_URL` points at the Pi, they can also rewrite its config. Keep it on your LAN or behind an authenticating reverse proxy.
 - `/api/targets` shows the configured upstream URLs to anyone who can load the page.
 - **Never publish go2rtc's port.** Its API returns the camera's RTSP address, login included. In this setup it listens only on loopback inside the dashboard container, and `server.py` passes through just the live feed and snapshots for the two named streams.
 - Anyone who can reach the dashboard can watch the camera and pan/tilt it. With pan/tilt configured, the dashboard container also holds the camera account (it talks ONVIF to the camera directly).
@@ -232,7 +233,7 @@ Follow these steps in order. Ask the user for anything in angle brackets; never 
 1. **Get the inputs from the user:**
    - the Pi's API address (`<pi-address>`, port `8080` unless they say otherwise)
    - where the dashboard should run (Portainer, Docker or local)
-   - whether the controls should be live, or stay on the fake target (the default)
+   - whether open/close/restart should reach the real door (the default) or a fake target, and whether reconfigure should stay on its fake target (the default)
 2. **Check the Pi is reachable** from the machine that will run the dashboard with `curl -s http://<pi-address>:8080/info`. It should return JSON with `door_opener`, `config` and `system`. Only call `GET /info`. Never call `/open`, `/close`, `/restart` or `/reconfigure` to test; they move the real door or rewrite its config.
 3. **Camera (optional):** ask the user to enter the camera account on the host themselves (it's a password). Check the RTSP port with a plain TCP connect, and check the stream only through go2rtc on loopback. Never print go2rtc's `/api/streams`, because it contains the login.
 4. **Configure without committing secrets:**
@@ -244,7 +245,7 @@ Follow these steps in order. Ask the user for anything in angle brackets; never 
    - `/status` returns `"status": "ok"`.
    - `/api/info` returns live data.
    - The page shows **online**.
-   - With controls on the fake target, clicking Open and confirming logs an `upstream unreachable` error in Activity. That's expected, and proves the controls aren't live.
+   - The Controls card shows **live** and Reconfigure shows **fake target** (unless the user chose otherwise). Don't click Open, Close or Restart to test; they move the real door.
    - If the camera is on, its card shows **live · 720p**.
-7. **Go live, only if the user explicitly asks:** set `KC_CONTROL_URL` to the Pi URL and redeploy. The Controls badge changes from **fake target** to **live**.
+7. **Enable reconfigure, only if the user explicitly asks:** set `KC_RECONFIGURE_URL` to the Pi URL and redeploy. The Reconfigure badge changes from **fake target** to **live**.
 8. **Optional:** add the Uptime Kuma and Homepage entries from [Monitoring](#monitoring).
