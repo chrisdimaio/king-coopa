@@ -60,6 +60,7 @@ All settings are environment variables. For local runs they can also live in `da
 | `PORT` | no | `8090` | Port the dashboard listens on. |
 | `BIND` | no | `0.0.0.0` | Interface to listen on. Use `127.0.0.1` for local-only. |
 | `KC_TIMEOUT` | no | `10` | Upstream request timeout, in seconds. |
+| `KC_DOOR_TIMEOUT` | no | `90` | Timeout for open and close, in seconds. The controller only answers once the actuator has run its full stroke and then rested for its duty cycle: `stroke / speed × (1 + duty_cycle)`, about 30 s with `stroke: 100`, `speed: 4`, `duty_cycle: 0.2`. Keep this above that. |
 | `KC_GO2RTC_URL` | camera only | — | The go2rtc relay, normally `http://127.0.0.1:1984`. Leave unset to hide the camera card. |
 | `KC_CAMERA_HOST` | camera only | — | Camera address. Used by go2rtc, not the dashboard. |
 | `TAPO_USER`, `TAPO_PASS` | camera only | — | The camera's Tapo **Camera Account** (Tapo app → camera → Advanced settings → Camera Account), **URL-encoded** (`@` → `%40`, `$` → `%24`). Used by go2rtc for video, and by the dashboard for pan/tilt. |

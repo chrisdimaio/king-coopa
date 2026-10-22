@@ -920,10 +920,22 @@ $("interval").onchange = schedule;
 $("refresh").onclick = refresh;
 
 // ---- controls ----
+// How long the controller takes to answer /open or /close: it blocks for the full stroke plus the
+// duty-cycle rest (see linear_actuators.py), e.g. 100 / 4 * 1.2 = 30 s with the stock config.
+function doorSeconds() {
+  const a = current && current.actuator_specs;
+  if (!a || !a.speed) return null;
+  return Math.round((a.stroke / a.speed) * (1 + (a.duty_cycle || 0)));
+}
+
 async function call(method, path, body) {
   const opts = { method };
   if (body !== undefined) { opts.body = body; opts.headers = { "Content-Type": "text/yaml" }; }
-  log(`${method} ${path} …`);
+  const moving = path === "/open" || path === "/close";
+  const secs = moving ? doorSeconds() : null;
+  log(`${method} ${path} …${secs ? ` (the door takes about ${secs}s)` : ""}`);
+  // While the controller is busy, refresh the door state often so OPENING/CLOSING shows up.
+  const poll = moving ? setInterval(refresh, 3000) : null;
   try {
     const res = await fetch("/api" + path, opts);
     const text = await res.text();
@@ -935,6 +947,8 @@ async function call(method, path, body) {
   } catch (e) {
     log(`${method} ${path} failed: ${e.message}`, "err");
     return false;
+  } finally {
+    if (poll) { clearInterval(poll); refresh(); }
   }
 }
 

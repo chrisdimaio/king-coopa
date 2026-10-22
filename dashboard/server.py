@@ -74,16 +74,19 @@ for _name, _url in (("KC_INFO_URL", INFO_URL), ("KC_CONTROL_URL", CONTROL_URL),
 BIND = os.environ.get("BIND", "0.0.0.0")  # nosec B104
 PORT = int(os.environ.get("PORT", "8090"))
 TIMEOUT = float(os.environ.get("KC_TIMEOUT", "10"))
+# The controller's /open and /close only answer once the actuator has finished its stroke and its
+# duty-cycle rest (stroke / speed * (1 + duty_cycle), about 30 s with the stock config).
+DOOR_TIMEOUT = float(os.environ.get("KC_DOOR_TIMEOUT", "90"))
 STARTED = time.time()
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
-# (method, dashboard path) -> (upstream base, upstream path)
+# (method, dashboard path) -> (upstream base, upstream path, timeout)
 ROUTES = {
-    ("GET", "/api/info"): (INFO_URL, "/info"),
-    ("PUT", "/api/open"): (CONTROL_URL, "/open"),
-    ("PUT", "/api/close"): (CONTROL_URL, "/close"),
-    ("PUT", "/api/restart"): (CONTROL_URL, "/restart"),
-    ("POST", "/api/reconfigure"): (RECONFIGURE_URL, "/reconfigure"),
+    ("GET", "/api/info"): (INFO_URL, "/info", TIMEOUT),
+    ("PUT", "/api/open"): (CONTROL_URL, "/open", DOOR_TIMEOUT),
+    ("PUT", "/api/close"): (CONTROL_URL, "/close", DOOR_TIMEOUT),
+    ("PUT", "/api/restart"): (CONTROL_URL, "/restart", TIMEOUT),
+    ("POST", "/api/reconfigure"): (RECONFIGURE_URL, "/reconfigure", TIMEOUT),
 }
 MAX_BODY = 64 * 1024
 
@@ -203,7 +206,7 @@ class Handler(SimpleHTTPRequestHandler):
         route = ROUTES.get((method, self.path))
         if route is None:
             return self._send(404, b'{"error": "unknown route"}')
-        base, path = route
+        base, path, timeout = route
 
         body = None
         length = int(self.headers.get("Content-Length") or 0)
@@ -217,10 +220,14 @@ class Handler(SimpleHTTPRequestHandler):
             req.add_header("Content-Type", self.headers.get("Content-Type", "text/yaml"))
         try:
             # Upstream scheme is restricted to http(s) at startup.
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:  # nosec B310
+            with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
                 self._send(resp.status, resp.read())
         except urllib.error.HTTPError as e:
             self._send(e.code, e.read() or b'{"error": "upstream error"}')
+        except TimeoutError:
+            # The request reached the controller; it just didn't answer in time. Moves keep going.
+            msg = f"no answer within {timeout:.0f}s (the controller may still be working)"
+            self._send(504, json.dumps({"error": msg, "target": base}).encode())
         except (OSError, http.client.HTTPException) as e:  # unreachable host, timeout, DNS failure, bad response
             msg = f"upstream unreachable: {getattr(e, 'reason', e)}"
             self._send(502, json.dumps({"error": msg, "target": base}).encode())
