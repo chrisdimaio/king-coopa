@@ -5,13 +5,18 @@ controls point at different targets while the dashboard is being built.
 
 Optional coop camera: when KC_GO2RTC_URL is set, the live feed and snapshots are relayed from a
 go2rtc instance that is only reachable from here (its API exposes the camera login, so it must
-never be published). Only the two named streams and these two operations are passed through.
+never be published). Only the named streams and these operations are passed through. Audio is
+opt-in per connection ("listen"): it uses separate go2rtc streams that transcode the camera's PCMA
+to AAC, and the server cuts audio connections off after KC_AUDIO_SECONDS. Live camera connections
+are tracked so they can be listed and disconnected from the UI.
 Pan/tilt (optional): when KC_CAMERA_HOST, TAPO_USER and TAPO_PASS are set, the dashboard talks
 ONVIF to the camera directly (see ptz.py) for small fixed-step moves and presets.
 """
 import http.client
+import itertools
 import json
 import os
+import re
 import socket
 import threading
 import time
@@ -44,10 +49,13 @@ if not INFO_URL:
 # own target, defaulting to a fake .invalid host so it can't rewrite the Pi's config until set.
 CONTROL_URL = (os.environ.get("KC_CONTROL_URL") or INFO_URL).rstrip("/")
 RECONFIGURE_URL = os.environ.get("KC_RECONFIGURE_URL", "http://fake-king-coopa.invalid:8080").rstrip("/")
-# Only plain HTTP(S) upstreams; urlopen would otherwise also accept file:// and friends.
-# Camera relay (optional). go2rtc stream names for each quality the UI offers.
+# Camera relay (optional). go2rtc stream names for each quality the UI offers; the *_audio
+# variants add AAC audio (go2rtc runs ffmpeg only while one of them has a viewer).
 GO2RTC_URL = os.environ.get("KC_GO2RTC_URL", "").rstrip("/")
 CAMERA_STREAMS = {"sd": "coop_sd", "hd": "coop_hd"}
+AUDIO_STREAMS = {"sd": "coop_sd_audio", "hd": "coop_hd_audio"}
+AUDIO_SECONDS = int(os.environ.get("KC_AUDIO_SECONDS", "300"))
+SESSION_ID = re.compile(r"^[a-f0-9]{16,32}$")
 # Pan/tilt over ONVIF. Credentials are the camera account, URL-encoded as for go2rtc.
 _cam_host = os.environ.get("KC_CAMERA_HOST", "")
 _cam_user = urllib.parse.unquote(os.environ.get("TAPO_USER", ""))
@@ -59,6 +67,7 @@ PTZ_STEPS = {"small": 0.05, "large": 0.2}
 PTZ_DIRS = {"left": (-1, 0), "right": (1, 0), "up": (0, 1), "down": (0, -1)}
 for _name, _url in (("KC_INFO_URL", INFO_URL), ("KC_CONTROL_URL", CONTROL_URL),
                     ("KC_RECONFIGURE_URL", RECONFIGURE_URL), ("KC_GO2RTC_URL", GO2RTC_URL)):
+    # Only plain HTTP(S) upstreams; urlopen would otherwise also accept file:// and friends.
     if _url and not _url.startswith(("http://", "https://")):
         raise SystemExit(f"{_name} must start with http:// or https:// (got {_url!r}).")
 # All interfaces by default: inside a container the published port arrives on eth0, not loopback.
@@ -77,6 +86,76 @@ ROUTES = {
     ("POST", "/api/reconfigure"): (RECONFIGURE_URL, "/reconfigure"),
 }
 MAX_BODY = 64 * 1024
+
+
+def _agent(ua):
+    """Short "Browser on OS" label for the viewers list."""
+    browser = next((name for key, name in (("Edg/", "Edge"), ("Firefox/", "Firefox"), ("Chrome/", "Chrome"),
+                                           ("Safari/", "Safari")) if key in ua), "Browser")
+    system = next((name for key, name in (("Android", "Android"), ("iPhone", "iPhone"), ("iPad", "iPad"),
+                                          ("Windows", "Windows"), ("Mac OS", "Mac"), ("Linux", "Linux")) if key in ua),
+                  "unknown OS")
+    return f"{browser} on {system}"
+
+
+class CameraSessions:
+    """Live camera WebSocket connections, so they can be listed and cut off from the UI.
+
+    A session id (sid) is a random id each page load picks; one tab may reconnect several times.
+    Disconnecting a sid closes its sockets and refuses that sid for an hour, so the tab stops
+    instead of silently reconnecting; the page then offers a manual reconnect with a new sid.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._ids = itertools.count(1)
+        self._live = {}      # conn id -> {"sid", "client", "agent", "quality", "audio", "started", "socks"}
+        self._killed = {}    # sid -> time
+
+    def add(self, sid, client, agent, quality, audio, socks):
+        with self._lock:
+            cid = next(self._ids)
+            self._live[cid] = {"sid": sid, "client": client, "agent": agent, "quality": quality,
+                               "audio": audio, "started": time.time(), "socks": socks}
+            return cid
+
+    def remove(self, cid):
+        with self._lock:
+            self._live.pop(cid, None)
+
+    def killed(self, sid):
+        with self._lock:
+            now = time.time()
+            for s, t in list(self._killed.items()):
+                if now - t > 3600:
+                    del self._killed[s]
+            return sid in self._killed
+
+    def listing(self):
+        with self._lock:
+            now = time.time()
+            return [{"sid": c["sid"], "client": c["client"], "agent": c["agent"], "quality": c["quality"],
+                     "audio": c["audio"], "seconds": int(now - c["started"])} for c in self._live.values()]
+
+    def disconnect(self, sids):
+        with self._lock:
+            targets = [c for c in self._live.values() if c["sid"] in sids]
+            for sid in sids:
+                self._killed[sid] = time.time()
+        for c in targets:
+            _close(c["socks"])
+        return len(targets)
+
+
+def _close(socks):
+    for s in socks:
+        try:
+            s.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+
+
+SESSIONS = CameraSessions()
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -116,6 +195,8 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/api/camera/ptz":
             return self._ptz_post()
+        if self.path == "/api/camera/sessions":
+            return self._sessions_post()
         self._proxy("POST")
 
     def _proxy(self, method):
@@ -147,20 +228,32 @@ class Handler(SimpleHTTPRequestHandler):
     # ---- camera relay ----
     def _camera(self, url):
         if url.path == "/api/camera":
-            info = {"enabled": bool(GO2RTC_URL), "qualities": list(CAMERA_STREAMS), "ptz": PTZ is not None}
+            info = {"enabled": bool(GO2RTC_URL), "qualities": list(CAMERA_STREAMS), "ptz": PTZ is not None,
+                    "audio_seconds": AUDIO_SECONDS}
             return self._send(200, json.dumps(info).encode())
+        if url.path == "/api/camera/sessions":
+            sid = urllib.parse.parse_qs(url.query).get("sid", [""])[0]
+            body = {"sessions": SESSIONS.listing(), "killed": bool(sid) and SESSIONS.killed(sid)}
+            return self._send(200, json.dumps(body).encode())
         if url.path == "/api/camera/ptz":
             return self._ptz_get()
         if not GO2RTC_URL:
             return self._send(404, b'{"error": "camera not configured"}')
-        quality = urllib.parse.parse_qs(url.query).get("q", ["sd"])[0]
+        query = urllib.parse.parse_qs(url.query)
+        quality = query.get("q", ["sd"])[0]
         src = CAMERA_STREAMS.get(quality)
         if src is None:
             return self._send(400, b'{"error": "unknown quality"}')
         if url.path == "/api/camera/snapshot":
             return self._camera_snapshot(src)
         if url.path == "/api/camera/ws" and self.headers.get("Upgrade", "").lower() == "websocket":
-            return self._camera_ws(src)
+            sid = query.get("sid", [""])[0]
+            if not SESSION_ID.match(sid):
+                return self._send(400, b'{"error": "bad session id"}')
+            if SESSIONS.killed(sid):
+                return self._send(410, b'{"error": "disconnected"}')
+            audio = query.get("audio", ["0"])[0] == "1"
+            return self._camera_ws(AUDIO_STREAMS[quality] if audio else src, sid, quality, audio)
         return self._send(404, b'{"error": "unknown route"}')
 
     # ---- pan/tilt ----
@@ -206,6 +299,23 @@ class Handler(SimpleHTTPRequestHandler):
             return self._send(502, json.dumps({"error": str(e)}).encode())
         return self._send(200, json.dumps(result).encode())
 
+    def _sessions_post(self):
+        """{"action": "disconnect", "sid": "<sid>"} | {"action": "disconnect_others", "sid": "<own sid>"}"""
+        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            req = json.loads(self.rfile.read(length)) if 0 < length <= 1024 else {}
+            action, sid = req.get("action"), str(req.get("sid", ""))
+        except (ValueError, AttributeError):
+            action, sid = None, ""
+        if not SESSION_ID.match(sid) or action not in ("disconnect", "disconnect_others"):
+            return self._send(400, b'{"error": "bad request"}')
+        if action == "disconnect":
+            sids = {sid}
+        else:
+            sids = {c["sid"] for c in SESSIONS.listing()} - {sid}
+        closed = SESSIONS.disconnect(sids) if sids else 0
+        return self._send(200, json.dumps({"ok": True, "closed": closed}).encode())
+
     def _camera_snapshot(self, src):
         req = urllib.request.Request(f"{GO2RTC_URL}/api/frame.jpeg?src={src}")
         try:
@@ -215,7 +325,7 @@ class Handler(SimpleHTTPRequestHandler):
         except (OSError, http.client.HTTPException):
             self._send(502, b'{"error": "camera unavailable"}')
 
-    def _camera_ws(self, src):
+    def _camera_ws(self, src, sid, quality, audio):
         """Splice the browser's WebSocket to go2rtc's /api/ws for one fixed stream."""
         up = urllib.parse.urlsplit(GO2RTC_URL)
         try:
@@ -242,12 +352,25 @@ class Handler(SimpleHTTPRequestHandler):
                     except OSError:
                         pass
 
+        socks = (upstream, self.connection)
+        cid = SESSIONS.add(sid, self.client_address[0], _agent(self.headers.get("User-Agent", "")),
+                           quality, audio, socks)
+        # Audio is time-limited on the server too, so a sleeping or forgotten tab can't keep ffmpeg busy.
+        cutoff = threading.Timer(AUDIO_SECONDS + 15, _close, args=(socks,)) if audio else None
+        if cutoff:
+            cutoff.daemon = True
+            cutoff.start()
         downstream = threading.Thread(target=pump, args=(upstream, self.connection), daemon=True)
         downstream.start()
-        pump(self.connection, upstream)
-        downstream.join()
-        upstream.close()
-        self.close_connection = True
+        try:
+            pump(self.connection, upstream)
+            downstream.join()
+        finally:
+            if cutoff:
+                cutoff.cancel()
+            SESSIONS.remove(cid)
+            upstream.close()
+            self.close_connection = True
 
     def _send(self, status, payload, content_type="application/json"):
         self.send_response(status)

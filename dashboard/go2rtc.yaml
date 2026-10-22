@@ -5,7 +5,8 @@ api:
   # dashboard's network namespace and server.py relays just the live feed and snapshots.
   listen: "127.0.0.1:1984"
 rtsp:
-  listen: ""          # don't re-serve RTSP
+  # Loopback only: ffmpeg reads coop_sd/coop_hd from here to add AAC audio (the *_audio streams).
+  listen: "127.0.0.1:8554"
 webrtc:
   listen: ""          # the dashboard uses MSE over a WebSocket instead
 srtp:
@@ -16,3 +17,7 @@ streams:
   # Tapo: stream2 = 720p, stream1 = full resolution. TAPO_USER / TAPO_PASS must be URL-encoded.
   coop_sd: rtsp://${TAPO_USER}:${TAPO_PASS}@${KC_CAMERA_HOST}:554/stream2
   coop_hd: rtsp://${TAPO_USER}:${TAPO_PASS}@${KC_CAMERA_HOST}:554/stream1
+  # Same video, plus the camera's PCMA audio transcoded to AAC so browsers can play it. Reuses the
+  # streams above (no extra camera session); ffmpeg only runs while someone is listening.
+  coop_sd_audio: ffmpeg:coop_sd#video=copy#audio=aac
+  coop_hd_audio: ffmpeg:coop_hd#video=copy#audio=aac

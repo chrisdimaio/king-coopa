@@ -17,6 +17,7 @@ services:
       KC_RECONFIGURE_URL: ${KC_RECONFIGURE_URL:-http://fake-king-coopa.invalid:8080}
       # Coop camera: set to http://127.0.0.1:1984 and start with --profile camera.
       KC_GO2RTC_URL: ${KC_GO2RTC_URL:-}
+      KC_AUDIO_SECONDS: ${KC_AUDIO_SECONDS:-300}
       # Pan/tilt (ONVIF) uses the same camera account; leave unset to hide the controls.
       KC_CAMERA_HOST: ${KC_CAMERA_HOST:-}
       TAPO_USER: ${TAPO_USER:-}

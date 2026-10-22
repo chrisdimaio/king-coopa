@@ -163,6 +163,15 @@
   .seg button + button { border-left: 1px solid var(--line-strong); }
   .seg button.active { background: var(--accent-soft); color: var(--accent); }
 
+  /* ---- listen / viewers ---- */
+  #cam-listen.on { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .viewers { list-style: none; padding: 0; margin: 10px 0; }
+  .viewers li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0;
+                border-top: 1px solid var(--line); font-size: 14px; }
+  .viewers li:first-child { border-top: 0; }
+  .viewers button { padding: 4px 10px; font-size: 13px; }
+  .cam-overlay button { margin-top: 10px; }
+
   /* ---- pan/tilt ---- */
   .ptz-pad { position: absolute; right: 12px; bottom: 12px; display: grid; gap: 4px;
              grid-template-columns: repeat(3, 38px); grid-template-rows: repeat(3, 38px);
@@ -260,6 +269,8 @@
             <button type="button" data-q="sd" class="active">720p</button>
             <button type="button" data-q="hd">HD</button>
           </div>
+          <button type="button" id="cam-listen" title="Turn on sound for a few minutes">🔈 Listen</button>
+          <button type="button" id="cam-viewers" title="Who's watching; disconnect tabs you left open">Viewers</button>
           <button type="button" id="cam-snapshot" title="Open a full-resolution snapshot">Snapshot</button>
         </div>
       </div>
@@ -301,6 +312,18 @@
     </section>
   </div>
 </main>
+
+<dialog id="viewers">
+  <form method="dialog">
+    <h3>Camera viewers</h3>
+    <p class="muted" id="viewers-note"></p>
+    <ul id="viewers-list" class="viewers"></ul>
+    <div class="row">
+      <button type="button" id="viewers-others" class="danger">Disconnect all others</button>
+      <button value="close" class="primary">Close</button>
+    </div>
+  </form>
+</dialog>
 
 <dialog id="confirm">
   <form method="dialog">
@@ -587,7 +610,11 @@ applyTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark"
 // {"type":"mse","value":"<mime>"}, then binary fMP4 segments.
 const CAM_CODECS = ["avc1.640029", "avc1.64002A", "avc1.640033", "hvc1.1.6.L153.B0", "mp4a.40.2", "mp4a.40.5", "flac", "opus"];
 const CAM_LABEL = { sd: "720p", hd: "HD" };
-const cam = { ws: null, ms: null, sb: null, queue: [], quality: "sd", lastData: 0, live: false, retry: 0, timer: null };
+const cam = { ws: null, ms: null, sb: null, queue: [], quality: "sd", lastData: 0, live: false, retry: 0, timer: null,
+              sid: newSid(), audioUntil: 0, audioSeconds: 300, listenTick: null, failing: false };
+// Random per-page id; the server uses it to list and disconnect this tab.
+function newSid() { return [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, "0")).join(""); }
+const camListening = () => cam.audioUntil > Date.now();
 
 function camShow(badge, badgeClass, overlay) {
   $("cam-badge").textContent = badge;
@@ -605,10 +632,27 @@ function camStop() {
 }
 
 function camFail(reason) {
+  if (cam.failing) return;
+  cam.failing = true;
   camStop();
-  const delay = Math.min(30, 5 * 2 ** cam.retry++);
-  camShow("offline", "err", `Camera offline (${reason}). Retrying in ${delay}s…`);
-  cam.timer = setTimeout(camStart, delay * 1000);
+  // Was this tab disconnected from the Viewers list (here or on another device)? Then stop, don't retry.
+  fetch(`/api/camera/sessions?sid=${cam.sid}`).then((r) => r.json()).then((d) => d.killed).catch(() => false)
+    .then((killed) => {
+      cam.failing = false;
+      if (killed) return camDisconnected();
+      const delay = Math.min(30, 5 * 2 ** cam.retry++);
+      camShow("offline", "err", `Camera offline (${reason}). Retrying in ${delay}s…`);
+      cam.timer = setTimeout(camStart, delay * 1000);
+    });
+}
+
+function camDisconnected() {
+  stopListening(false);
+  camShow("disconnected", "", "This tab was disconnected from the Viewers list.");
+  const b = el("button", "primary", "Reconnect");
+  b.type = "button";
+  b.onclick = () => { cam.sid = newSid(); cam.retry = 0; camStart(); };
+  $("cam-overlay").append(document.createElement("br"), b);
 }
 
 function camStart() {
@@ -617,7 +661,8 @@ function camStart() {
   const MS = window.ManagedMediaSource || window.MediaSource;
   if (!MS) { camShow("unsupported", "err", "This browser can't play the live feed. Use Snapshot instead."); return; }
   camShow("connecting…", "", "Connecting…");
-  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/camera/ws?q=${cam.quality}`);
+  const audio = camListening() ? "&audio=1" : "";
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/camera/ws?q=${cam.quality}&sid=${cam.sid}${audio}`);
   ws.binaryType = "arraybuffer";
   cam.ws = ws; cam.lastData = Date.now();
   ws.onopen = () => {
@@ -667,14 +712,18 @@ function camPump() {
   cam.queue = [];
   try { sb.appendBuffer(buf); } catch { camFail("playback error"); return; }
   if (v.paused) v.play().catch(() => { /* autoplay blocked; muted video normally plays */ });
-  if (!cam.live) { cam.live = true; cam.retry = 0; camShow(`live · ${CAM_LABEL[cam.quality]}`, "ok", ""); }
+  if (!cam.live) {
+    cam.live = true; cam.retry = 0;
+    camShow(`live · ${CAM_LABEL[cam.quality]}${camListening() ? " · 🔊" : ""}`, "ok", "");
+    viewersLoad().catch(() => { /* count is best effort */ });
+  }
 }
 
 // No video for a while (camera or Wi-Fi dropped without closing the socket) -> reconnect.
 setInterval(() => { if (cam.ws && Date.now() - cam.lastData > 15000) camFail("no video"); }, 5000);
 document.addEventListener("visibilitychange", () => {
   if ($("camera-card").hidden) return;
-  if (document.hidden) { camStop(); camShow("paused", "", "Paused while the tab is hidden."); }
+  if (document.hidden) { stopListening(false); camStop(); camShow("paused", "", "Paused while the tab is hidden."); }
   else { cam.retry = 0; camStart(); }
 });
 for (const b of document.querySelectorAll(".seg button")) {
@@ -749,11 +798,74 @@ $("ptz-save").onclick = guarded($("ptz-save"), async () => {
   } catch (e) { ptzMsg(`Couldn't save: ${e.message}`, "err"); }
 });
 
+// ---- listen: audio for a few minutes, then back to video-only ----
+function listenLabel() {
+  const left = Math.max(0, Math.ceil((cam.audioUntil - Date.now()) / 1000));
+  $("cam-listen").textContent = camListening() ? `🔊 ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} · Stop` : "🔈 Listen";
+  $("cam-listen").classList.toggle("on", camListening());
+}
+function startListening() {
+  cam.audioUntil = Date.now() + cam.audioSeconds * 1000;
+  $("cam-video").muted = false;            // allowed: this runs from a click
+  clearInterval(cam.listenTick);
+  cam.listenTick = setInterval(() => { if (!camListening()) stopListening(true); else listenLabel(); }, 1000);
+  listenLabel();
+  cam.retry = 0; camStart();               // reconnect to the audio stream
+}
+function stopListening(reconnect) {
+  const was = cam.audioUntil > 0;
+  cam.audioUntil = 0;
+  clearInterval(cam.listenTick);
+  $("cam-video").muted = true;
+  listenLabel();
+  if (was && reconnect) { cam.retry = 0; camStart(); }   // back to video-only, so ffmpeg stops
+}
+$("cam-listen").onclick = () => (camListening() ? stopListening(true) : startListening());
+
+// ---- viewers: list live camera connections, disconnect the ones left open ----
+const fmtDur = (s) => (s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`);
+async function viewersLoad() {
+  const d = await (await fetch(`/api/camera/sessions?sid=${cam.sid}`)).json();
+  const others = d.sessions.filter((v) => v.sid !== cam.sid);
+  $("cam-viewers").textContent = `Viewers (${d.sessions.length})`;
+  const ul = $("viewers-list");
+  ul.innerHTML = "";
+  if (!d.sessions.length) ul.appendChild(el("li", "muted", "No one is watching right now."));
+  for (const v of d.sessions) {
+    const li = el("li");
+    const what = `${v.agent} · ${v.client} · ${CAM_LABEL[v.quality] || v.quality}${v.audio ? " · 🔊 listening" : ""} · ${fmtDur(v.seconds)}`;
+    li.appendChild(el("span", "", what));
+    if (v.sid === cam.sid) li.appendChild(el("span", "muted", "this tab"));
+    else {
+      const b = el("button", "danger", "Disconnect");
+      b.type = "button";
+      b.onclick = async () => { b.disabled = true; await viewersPost({ action: "disconnect", sid: v.sid }); };
+      li.appendChild(b);
+    }
+    ul.appendChild(li);
+  }
+  $("viewers-others").disabled = !others.length;
+  const mins = Math.round(cam.audioSeconds / 60);
+  $("viewers-note").textContent = `Sound turns itself off after ${mins} minute${mins === 1 ? "" : "s"}. Disconnected tabs stop until someone clicks Reconnect there.`;
+}
+async function viewersPost(body) {
+  try {
+    const r = await fetch("/api/camera/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (r.ok) log(`disconnected ${d.closed} camera connection${d.closed === 1 ? "" : "s"}`, "ok");
+  } finally { await viewersLoad().catch(() => { /* list refresh is best effort */ }); }
+}
+$("cam-viewers").onclick = async () => { await viewersLoad().catch(() => { /* show whatever we have */ }); $("viewers").showModal(); };
+$("viewers-others").onclick = () => viewersPost({ action: "disconnect_others", sid: cam.sid });
+
 $("cam-snapshot").onclick = () => window.open(`/api/camera/snapshot?q=hd&t=${Date.now()}`, "_blank", "noopener");
 fetch("/api/camera").then((r) => r.json()).then((c) => {
   if (!c.enabled) return;
   $("camera-card").hidden = false;
+  if (c.audio_seconds) cam.audioSeconds = c.audio_seconds;
   camStart();
+  viewersLoad().catch(() => { /* count is best effort */ });
+  setInterval(() => { if (!document.hidden) viewersLoad().catch(() => { /* best effort */ }); }, 30000);
   if (c.ptz) {
     $("ptz-pad").hidden = false;
     $("ptz-bar").hidden = false;
